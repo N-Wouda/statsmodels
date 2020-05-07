@@ -1,7 +1,6 @@
 """
 Compatibility tools for various data structure inputs
 """
-from statsmodels.compat.python import range
 import numpy as np
 import pandas as pd
 
@@ -39,7 +38,7 @@ def interpret_data(data, colnames=None, rownames=None):
 
     Parameters
     ----------
-    data : ndarray-like
+    data : array_like
     colnames : sequence or None
         May be part of data structure
     rownames : sequence or None
@@ -50,6 +49,9 @@ def interpret_data(data, colnames=None, rownames=None):
     """
     if isinstance(data, np.ndarray):
         if _is_structured_ndarray(data):
+            import warnings
+            from statsmodels.tools.sm_exceptions import recarray_warning
+            warnings.warn(recarray_warning, FutureWarning)
             if colnames is None:
                 colnames = data.dtype.names
             values = struct_to_ndarray(data)
@@ -84,7 +86,7 @@ def interpret_data(data, colnames=None, rownames=None):
 
 
 def struct_to_ndarray(arr):
-    return arr.view((float, len(arr.dtype.names)), type=np.ndarray)
+    return arr.view((float, (len(arr.dtype.names),)), type=np.ndarray)
 
 
 def _is_using_ndarray_type(endog, exog):

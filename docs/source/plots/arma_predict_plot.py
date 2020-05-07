@@ -1,9 +1,10 @@
-import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import pandas as pd
 
+import statsmodels.api as sm
+
 dta = sm.datasets.sunspots.load_pandas().data[['SUNACTIVITY']]
-dta.index = pd.DatetimeIndex(start='1700', end='2009', freq='A')
+dta.index = pd.date_range(start='1700', end='2009', freq='A')
 res = sm.tsa.ARMA(dta, (3, 0)).fit(disp=0)
 fig, ax = plt.subplots()
 ax = dta.loc['1950':].plot(ax=ax)

@@ -13,7 +13,7 @@ changes to code by josef-pktd:
 
 """
 
-from statsmodels.compat.python import range, lrange
+from statsmodels.compat.python import lrange
 import numpy as np
 from itertools import combinations
 
@@ -75,7 +75,6 @@ class LeavePOut(object):
     """
     Leave-P-Out cross validation iterator:
     Provides train/test indexes to split data in train test sets
-
     """
 
     def __init__(self, n, p):
@@ -232,7 +231,6 @@ class LeaveOneLabelOut(object):
         [[1 2]
         [3 4]] [[5 6]
         [7 8]] [1 2] [1 2]
-
         """
         self.labels = labels
 
@@ -300,14 +298,14 @@ class KStepAhead(object):
             number of steps ahead
         start : int
             initial size of data for fitting
-        kall : boolean
+        kall : bool
             if true. all values for up to k-step ahead are included in the test index.
             If false, then only the k-th step ahead value is returnd
 
 
         Notes
         -----
-        I don't think this is really useful, because it can be done with
+        I do not think this is really useful, because it can be done with
         a very simple loop instead.
         Useful as a plugin, but it could return slices instead for faster array access.
 

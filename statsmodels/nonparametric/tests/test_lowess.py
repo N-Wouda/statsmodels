@@ -26,7 +26,7 @@ rpath = os.path.join(curdir, 'results')
 class TestLowess(object):
 
     def test_import(self):
-        #this doesn't work
+        #this does not work
         #from statsmodels.api.nonparametric import lowess as lowess1
         import statsmodels.api as sm
         lowess1 = sm.nonparametric.lowess
@@ -57,7 +57,7 @@ class TestLowess(object):
         expect = np.array([data[x], data[out]]).T
         assert_almost_equal(result, expect, decimal)
 
-    # TODO: Refactor as parameterized test once nose is permanently dropped
+    # TODO: Refactor as parametrized test once nose is permanently dropped
     def test_simple(self):
         self.generate('test_simple', 'test_lowess_simple.csv')
 
@@ -78,7 +78,7 @@ class TestLowess(object):
 
     def test_delta_rdef(self):
         self.generate('test_delta_Rdef', 'test_lowess_delta.csv', out='out_Rdef',
-                      kwargs=lambda data: {'frac': .1, 'delta': .01 * data['x'].ptp()})
+                      kwargs=lambda data: {'frac': .1, 'delta': .01 * np.ptp(data['x'])})
 
     def test_delta_1(self):
         self.generate('test_delta_1', 'test_lowess_delta.csv', out='out_1',

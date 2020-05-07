@@ -4,10 +4,10 @@ State Space Representation, Kalman Filter, Smoother, and Simulation Smoother
 Author: Chad Fulton
 License: Simplified-BSD
 """
-from __future__ import division, absolute_import, print_function
 
 import numpy as np
 from .kalman_smoother import KalmanSmoother
+from .cfa_simulation_smoother import CFASimulationSmoother
 from . import tools
 
 SIMULATION_STATE = 0x01
@@ -24,7 +24,7 @@ class SimulationSmoother(KalmanSmoother):
 
     Parameters
     ----------
-    k_endog : array_like or integer
+    k_endog : {array_like, int}
         The observed time-series process :math:`y` if array like or the
         number of variables in the process if an integer.
     k_states : int
@@ -83,21 +83,21 @@ class SimulationSmoother(KalmanSmoother):
 
         Parameters
         ----------
-        simulation_output : integer, optional
+        simulation_output : int, optional
             Simulation output bitmask. If this is specified, it is simply
             returned and the other arguments are ignored.
-        simulate_state : boolean, optional
+        simulate_state : bool, optional
             Whether or not to include the state in the simulation output.
-        simulate_disturbance : boolean, optional
+        simulate_disturbance : bool, optional
             Whether or not to include the state and observation disturbances
             in the simulation output.
-        simulate_all : boolean, optional
+        simulate_all : bool, optional
             Whether or not to include all simulation output.
         \*\*kwargs
             Additional keyword arguments. Present so that calls to this method
             can use \*\*kwargs without clearing out additional arguments.
         """
-        # If we don't explicitly have simulation_output, try to get it from
+        # If we do not explicitly have simulation_output, try to get it from
         # kwargs
         if simulation_output is None:
             simulation_output = 0
@@ -112,7 +112,7 @@ class SimulationSmoother(KalmanSmoother):
             # Handle case of no information in kwargs
             if simulation_output == 0:
 
-                # If some arguments were passed, but we still don't have any
+                # If some arguments were passed, but we still do not have any
                 # simulation output, raise an exception
                 argument_set = not all([
                     simulate_state is None, simulate_disturbance is None,
@@ -165,12 +165,21 @@ class SimulationSmoother(KalmanSmoother):
         simulator = self._simulators[prefix]
 
         # Set the disturbance variates
-        disturbance_variates = np.atleast_1d(np.array(
-            np.r_[measurement_shocks.ravel(), state_shocks.ravel()],
-            dtype=self.dtype
-        ).squeeze())
-        simulator.set_disturbance_variates(disturbance_variates,
-                                           pretransformed=True)
+        if measurement_shocks is not None and state_shocks is not None:
+            disturbance_variates = np.atleast_1d(np.array(
+                np.r_[measurement_shocks.ravel(), state_shocks.ravel()],
+                dtype=self.dtype
+            ).squeeze())
+            simulator.set_disturbance_variates(disturbance_variates,
+                                               pretransformed=True)
+        elif measurement_shocks is None and state_shocks is None:
+            pass
+        elif measurement_shocks is not None:
+            raise ValueError('Must set `state_shocks` if `measurement_shocks`'
+                             ' is set.')
+        elif state_shocks is not None:
+            raise ValueError('Must set `measurement_shocks` if `state_shocks`'
+                             ' is set.')
 
         # Set the intial state vector
         initial_state = np.atleast_1d(np.array(
@@ -191,7 +200,7 @@ class SimulationSmoother(KalmanSmoother):
             simulated_state[:, :nsimulations].T
         )
 
-    def simulation_smoother(self, simulation_output=None,
+    def simulation_smoother(self, simulation_output=None, method='kfs',
                             results_class=None, prefix=None, **kwargs):
         r"""
         Retrieve a simulation smoother for the statespace model.
@@ -201,11 +210,18 @@ class SimulationSmoother(KalmanSmoother):
         simulation_output : int, optional
             Determines which simulation smoother output is calculated.
             Default is all (including state and disturbances).
+        method : {'kfs', 'cfa'}, optional
+            Method for simulation smoothing. If `method='kfs'`, then the
+            simulation smoother is based on Kalman filtering and smoothing
+            recursions. If `method='cfa'`, then the simulation smoother is
+            based on the Cholesky Factor Algorithm (CFA) approach. The CFA
+            approach is not applicable to all state space models, but can be
+            faster for the cases in which it is supported.
         simulation_smooth_results_class : class, optional
             Default results class to use to save output of simulation
             smoothing. Default is `SimulationSmoothResults`. If specified,
             class must extend from `SimulationSmoothResults`.
-        prefix : string
+        prefix : str
             The prefix of the datatype. Usually only used internally.
         **kwargs
             Additional keyword arguments, used to set the simulation output.
@@ -215,6 +231,17 @@ class SimulationSmoother(KalmanSmoother):
         -------
         SimulationSmoothResults
         """
+        method = method.lower()
+
+        # Short-circuit for CFA
+        if method == 'cfa':
+            if simulation_output not in [None, 1, -1]:
+                raise ValueError('Can only retrieve simulations of the state'
+                                 ' vector using the CFA simulation smoother.')
+            return CFASimulationSmoother(self)
+        elif method != 'kfs':
+            raise ValueError('Invalid simulation smoother method "%s". Valid'
+                             ' methods are "kfs" or "cfa".' % method)
 
         # Set the class to be the default results class, if None provided
         if results_class is None:
@@ -284,31 +311,31 @@ class SimulationSmoothResults(object):
         Datatype of representation matrices
     prefix : str
         BLAS prefix of representation matrices
-    simulation_output : integer
+    simulation_output : int
         Bitmask controlling simulation output.
-    simulate_state : boolean
+    simulate_state : bool
         Flag for if the state is included in simulation output.
-    simulate_disturbance : boolean
+    simulate_disturbance : bool
         Flag for if the state and observation disturbances are included in
         simulation output.
-    simulate_all : boolean
+    simulate_all : bool
         Flag for if simulation output should include everything.
-    generated_measurement_disturbance : array
+    generated_measurement_disturbance : ndarray
         Measurement disturbance variates used to genereate the observation
         vector.
-    generated_state_disturbance : array
+    generated_state_disturbance : ndarray
         State disturbance variates used to genereate the state and
         observation vectors.
-    generated_obs : array
+    generated_obs : ndarray
         Generated observation vector produced as a byproduct of simulation
         smoothing.
-    generated_state : array
+    generated_state : ndarray
         Generated state vector produced as a byproduct of simulation smoothing.
-    simulated_state : array
+    simulated_state : ndarray
         Simulated state.
-    simulated_measurement_disturbance : array
+    simulated_measurement_disturbance : ndarray
         Simulated measurement disturbance.
-    simulated_state_disturbance : array
+    simulated_state_disturbance : ndarray
         Simulated state disturbance.
     """
 
@@ -372,20 +399,21 @@ class SimulationSmoothResults(object):
 
     @property
     def generated_measurement_disturbance(self):
-        """
-        Randomly drawn measurement disturbance variates, used to construct
-        `generated_obs`.
+        r"""
+        Randomly drawn measurement disturbance variates
+
+        Used to construct `generated_obs`.
 
         Notes
         -----
 
         .. math::
-            \varepsilon_t^+ ~ N(0, H_t)
+
+           \varepsilon_t^+ ~ N(0, H_t)
 
         If `disturbance_variates` were provided to the `simulate()` method,
         then this returns those variates (which were N(0,1)) transformed to the
         distribution above.
-
         """
         if self._generated_measurement_disturbance is None:
             end = self.model.nobs * self.model.k_endog
@@ -396,7 +424,7 @@ class SimulationSmoothResults(object):
 
     @property
     def generated_state_disturbance(self):
-        """
+        r"""
         Randomly drawn state disturbance variates, used to construct
         `generated_state` and `generated_obs`.
 
@@ -404,12 +432,12 @@ class SimulationSmoothResults(object):
         -----
 
         .. math::
+
             \eta_t^+ ~ N(0, Q_t)
 
         If `disturbance_variates` were provided to the `simulate()` method,
         then this returns those variates (which were N(0,1)) transformed to the
         distribution above.
-
         """
         if self._generated_state_disturbance is None:
             start = self.model.nobs * self.model.k_endog
@@ -420,7 +448,7 @@ class SimulationSmoothResults(object):
 
     @property
     def generated_obs(self):
-        """
+        r"""
         Generated vector of observations by iterating on the observation and
         transition equations, given a random initial state draw and random
         disturbance draws.
@@ -429,8 +457,8 @@ class SimulationSmoothResults(object):
         -----
 
         .. math::
-            y_t^+ = d_t + Z_t \alpha_t^+ + \varepsilon_t^+
 
+            y_t^+ = d_t + Z_t \alpha_t^+ + \varepsilon_t^+
         """
         if self._generated_obs is None:
             self._generated_obs = np.array(
@@ -440,7 +468,7 @@ class SimulationSmoothResults(object):
 
     @property
     def generated_state(self):
-        """
+        r"""
         Generated vector of states by iterating on the transition equation,
         given a random initial state draw and random disturbance draws.
 
@@ -448,8 +476,8 @@ class SimulationSmoothResults(object):
         -----
 
         .. math::
-            \alpha_{t+1}^+ = c_t + T_t \alpha_t^+ + \eta_t^+
 
+            \alpha_{t+1}^+ = c_t + T_t \alpha_t^+ + \eta_t^+
         """
         if self._generated_state is None:
             self._generated_state = np.array(
@@ -459,15 +487,15 @@ class SimulationSmoothResults(object):
 
     @property
     def simulated_state(self):
-        """
+        r"""
         Random draw of the state vector from its conditional distribution.
 
         Notes
         -----
 
         .. math::
-            \alpha ~ p(\alpha \mid Y_n)
 
+            \alpha ~ p(\alpha \mid Y_n)
         """
         if self._simulated_state is None:
             self._simulated_state = np.array(
@@ -477,7 +505,7 @@ class SimulationSmoothResults(object):
 
     @property
     def simulated_measurement_disturbance(self):
-        """
+        r"""
         Random draw of the measurement disturbance vector from its conditional
         distribution.
 
@@ -485,8 +513,8 @@ class SimulationSmoothResults(object):
         -----
 
         .. math::
-            \varepsilon ~ N(\hat \varepsilon, Var(\hat \varepsilon \mid Y_n))
 
+            \varepsilon ~ N(\hat \varepsilon, Var(\hat \varepsilon \mid Y_n))
         """
         if self._simulated_measurement_disturbance is None:
             self._simulated_measurement_disturbance = np.array(
@@ -497,7 +525,7 @@ class SimulationSmoothResults(object):
 
     @property
     def simulated_state_disturbance(self):
-        """
+        r"""
         Random draw of the state disturbance vector from its conditional
         distribution.
 
@@ -505,8 +533,8 @@ class SimulationSmoothResults(object):
         -----
 
         .. math::
-            \eta ~ N(\hat \eta, Var(\hat \eta \mid Y_n))
 
+            \eta ~ N(\hat \eta, Var(\hat \eta \mid Y_n))
         """
         if self._simulated_state_disturbance is None:
             self._simulated_state_disturbance = np.array(
@@ -525,7 +553,7 @@ class SimulationSmoothResults(object):
 
         Parameters
         ----------
-        simulation_output : integer, optional
+        simulation_output : int, optional
             Bitmask controlling simulation output. Default is to use the
             simulation output defined in object initialization.
         disturbance_variates : array_likes, optional

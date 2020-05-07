@@ -8,8 +8,10 @@ dist
 docs/source/generated
 docs/source/dev/generated
 docs/source/examples/generated
+docs/source/datasets/generated
 docs/source/examples/notebooks/generated
 docs/source/datasets/statsmodels.datasets.*
+docs/source/savefig
 docs/gettingstarted_0.png
 examples/executed
 
@@ -57,6 +59,12 @@ help
 .coverage
 coverage_html_report/
 
+# Idea IDE
+.idea/
+
+# VS Code
+.vscode/
+
 # Project specific
 statsmodels/version.py
 statsmodels.egg-info/
@@ -66,6 +74,7 @@ rehab.table
 salary.table
 .ipynb_checkpoints
 statsmodels/tsa/statespace/_statespace.pyx
+statsmodels/tsa/innovations/_arma_innovations.pyx
 statsmodels/tsa/regime_switching/_hamilton_filter.pyx
 statsmodels/tsa/regime_switching/_kim_smoother.pyx
 statsmodels/tsa/statespace/_initialization.pyx
@@ -73,6 +82,7 @@ statsmodels/tsa/statespace/_representation.pyx
 statsmodels/tsa/statespace/_kalman_filter.pyx
 statsmodels/tsa/statespace/_kalman_smoother.pyx
 statsmodels/tsa/statespace/_simulation_smoother.pyx
+statsmodels/tsa/statespace/_cfa_simulation_smoother.pyx
 statsmodels/tsa/statespace/_tools.pyx
 statsmodels/tsa/statespace/_filters/_conventional.pyx
 statsmodels/tsa/statespace/_filters/_inversions.pyx

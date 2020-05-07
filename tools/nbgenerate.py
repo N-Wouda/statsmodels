@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import argparse
+from functools import partial
+import hashlib
 import io
+import json
 import os
 import sys
 
-from colorama import init, Fore
-
-from functools import partial
+from colorama import Fore, init
+from nbconvert import HTMLExporter, RSTExporter
+from nbconvert.preprocessors import ExecutePreprocessor
+import nbformat
 
 try:
     from concurrent import futures
@@ -16,9 +20,6 @@ try:
 except ImportError:
     has_futures = False
 
-import nbformat
-from nbconvert import HTMLExporter, RSTExporter
-from nbconvert.preprocessors import ExecutePreprocessor
 
 init()
 
@@ -26,14 +27,14 @@ here = os.path.dirname(__file__)
 pkgdir = os.path.split(here)[0]
 EXAMPLE_DIR = os.path.abspath(os.path.join(pkgdir, "examples"))
 SOURCE_DIR = os.path.join(EXAMPLE_DIR, "notebooks")
-EXECUTED_DIR = os.path.join(EXAMPLE_DIR, "executed")
-DST_DIR = os.path.abspath(os.path.join(pkgdir,
-                                       "docs", "source", "examples",
+DOC_SRC_DIR = os.path.join(pkgdir, "docs", "source")
+DST_DIR = os.path.abspath(os.path.join(DOC_SRC_DIR, "examples",
                                        "notebooks", "generated"))
+EXECUTED_DIR = DST_DIR
 
 error_message = """
 ******************************************************************************
-ERROR: Error occured when running {notebook}
+ERROR: Error occurred when running {notebook}
 {exception}
 {message}
 ******************************************************************************
@@ -44,7 +45,7 @@ for dname in [EXECUTED_DIR, DST_DIR]:
 
 
 def execute_nb(src, dst, allow_errors=False, timeout=1000, kernel_name=None):
-    '''
+    """
     Execute notebook in `src` and write the output to `dst`
 
     Parameters
@@ -59,7 +60,7 @@ def execute_nb(src, dst, allow_errors=False, timeout=1000, kernel_name=None):
     Returns
     -------
     dst: str
-    '''
+    """
     with io.open(src, encoding='utf-8') as f:
         nb = nbformat.read(f, as_version=4)
 
@@ -74,7 +75,7 @@ def execute_nb(src, dst, allow_errors=False, timeout=1000, kernel_name=None):
 
 
 def convert(src, dst, to='rst'):
-    '''
+    """
     Convert a notebook `src`.
 
     Parameters
@@ -83,7 +84,7 @@ def convert(src, dst, to='rst'):
         filepaths
     to: {'rst', 'html'}
         format to export to
-    '''
+    """
     dispatch = {'rst': RSTExporter, 'html': HTMLExporter}
     exporter = dispatch[to.lower()]()
 
@@ -103,19 +104,25 @@ def find_notebooks(directory=None):
 
 
 def do_one(nb, to=None, execute=None, timeout=None, kernel_name=None,
-           report_error=True, error_fail=False, skip_existing=False):
+           report_error=True, error_fail=False, skip_existing=False,
+           execute_only=False):
     from traitlets.traitlets import TraitError
     import jupyter_client
 
     os.chdir(SOURCE_DIR)
     name = os.path.basename(nb)
     dst = os.path.join(EXECUTED_DIR, name)
-    update_needed = True
-    if skip_existing and os.path.exists(dst):
-        update_needed = (os.path.getmtime(dst) <= os.path.getmtime(nb))
-        if not update_needed:
-            print('Skipping {0}'.format(nb))
-            return dst
+    hash_file = f"{os.path.splitext(dst)[0]}.json"
+    existing_hash = ""
+    if os.path.exists(hash_file):
+        with open(hash_file, encoding="utf-8") as hf:
+            existing_hash = json.load(hf)
+    with io.open(nb, mode="rb") as f:
+        current_hash = hashlib.sha512(f.read()).hexdigest()
+    update_needed = existing_hash != current_hash
+    update_needed = update_needed or not skip_existing
+    if not update_needed:
+        print('Skipping {0}'.format(nb))
 
     if execute and update_needed:
         print("Executing %s to %s" % (nb, dst))
@@ -130,6 +137,11 @@ def do_one(nb, to=None, execute=None, timeout=None, kernel_name=None,
             if error_fail:
                 raise
 
+    if execute_only:
+        with open(hash_file, encoding="utf-8", mode="w") as hf:
+            json.dump(current_hash, hf)
+        return dst
+
     dst = os.path.splitext(os.path.join(DST_DIR, name))[0] + '.' + to
     print("Converting %s to %s" % (nb, dst))
     try:
@@ -139,13 +151,14 @@ def do_one(nb, to=None, execute=None, timeout=None, kernel_name=None,
         msg = ('Could not find kernel named `%s`, Available kernels:\n %s'
                % kernel_name, kernels)
         raise ValueError(msg)
-
+    with open(hash_file, encoding="utf-8", mode="w") as hf:
+        json.dump(current_hash, hf)
     return dst
 
 
 def do(fp=None, directory=None, to='html', execute=True, timeout=1000,
        kernel_name='', parallel=False, report_errors=True, error_fail=False,
-       skip_existing=False):
+       skip_existing=False, execute_only=False):
     if fp is None:
         nbs = find_notebooks(directory)
     else:
@@ -157,7 +170,7 @@ def do(fp=None, directory=None, to='html', execute=True, timeout=1000,
     func = partial(do_one, to=to,
                    execute=execute, timeout=timeout, kernel_name=kernel_name,
                    report_error=report_errors, error_fail=error_fail,
-                   skip_existing=skip_existing)
+                   skip_existing=skip_existing, execute_only=execute_only)
 
     if parallel and has_futures:
         with futures.ProcessPoolExecutor() as pool:
@@ -194,6 +207,9 @@ parser.add_argument("--kernel_name", type=str, default=None,
 parser.add_argument("--skip-execution", dest='skip_execution',
                     action='store_true',
                     help="Skip execution notebooks before converting")
+parser.add_argument("--execute-only", dest='execute_only',
+                    action='store_true',
+                    help="Execute notebooks but do not convert to html")
 parser.add_argument('--parallel', dest='parallel', action='store_true',
                     help='Execute notebooks in parallel')
 parser.add_argument('--report-errors', dest='report_errors',
@@ -222,7 +238,8 @@ def main():
        parallel=args.parallel,
        report_errors=args.report_errors,
        error_fail=args.error_fail,
-       skip_existing=args.skip_existing)
+       skip_existing=args.skip_existing,
+       execute_only=args.execute_only)
 
 
 if __name__ == '__main__':

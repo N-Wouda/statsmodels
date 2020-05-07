@@ -5,8 +5,6 @@ Created on Fri Sep 15 12:53:45 2017
 Author: Josef Perktold
 """
 
-from __future__ import division
-
 import numpy as np
 from scipy import stats
 
@@ -52,7 +50,6 @@ def _combine_bins(edge_index, x):
 
     >>> dia.combine_bins([0,1,3], np.arange(4))
     (array([0, 3]), array([1, 2]))
-
     """
     x = np.asarray(x)
     if x.ndim == 1:
@@ -83,7 +80,7 @@ def plot_probs(freq, probs_predicted, label='predicted', upp_xlim=None,
         two arrays of probabilites, this can be any probabilities for
         the same events, default is designed for comparing predicted
         and observed probabilities
-    label : string or tuple
+    label : str or tuple
         If string, then it will be used as the label for probs_predicted and
         "freq" is used for the other probabilities.
         If label is a tuple of strings, then the first is they are used as
@@ -98,10 +95,9 @@ def plot_probs(freq, probs_predicted, label='predicted', upp_xlim=None,
 
     Returns
     -------
-    fig : matplotlib figure instance
+    Figure
         The figure contains 3 subplot with probabilities, cumulative
         probabilities and a PP-plot
-
     """
 
     if isinstance(label, list):
@@ -145,7 +141,7 @@ def test_chisquare_prob(results, probs, bin_edges=None, method=None):
     ----------
     results : results instance
         Instance of a count regression results
-    probs : array
+    probs : ndarray
         Array of predicted probabilities with observations
         in rows and event counts in columns
     bin_edges : None or array
@@ -216,7 +212,7 @@ def test_poisson_zeroinflation(results_poisson, exog_infl=None):
     results_poisson: results instance
         The test is only valid if the results instance is a Poisson
         model.
-    exog_infl : array
+    exog_infl : ndarray
         Explanatory variables for the zero inflated or zero modified
         alternative. I exog_infl is None, then the inflation
         probability is assumed to be constant.
@@ -248,7 +244,6 @@ def test_poisson_zeroinflation(results_poisson, exog_infl=None):
     References
     ----------
     Jansakul and Hinde 2009
-
     """
     if not isinstance(results_poisson.model, Poisson):
         # GLM Poisson would be also valid, not tried
@@ -293,7 +288,6 @@ def test_poisson_zeroinflation_brock(results_poisson):
 
     The test reports two sided and one sided alternatives based on
     the normal distribution of the test statistic.
-
     """
 
     mu = results_poisson.predict()

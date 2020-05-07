@@ -6,17 +6,22 @@ License: BSD-3
 
 '''
 
-from statsmodels.compat.python import range
+
 from collections import OrderedDict
-from ._knockoff import RegressionFDR
+
 import numpy as np
 
+from statsmodels.stats._knockoff import RegressionFDR
 
-#==============================================
+__all__ = ['fdrcorrection', 'fdrcorrection_twostage', 'local_fdr',
+           'multipletests', 'NullDistribution', 'RegressionFDR']
+
+# ==============================================
 #
 # Part 1: Multiple Tests and P-Value Correction
 #
-#==============================================
+# ==============================================
+
 
 def _ecdf(x):
     '''no frills empirical cdf used in fdrcorrection
@@ -68,7 +73,7 @@ def multipletests(pvals, alpha=0.05, method='hs', is_sorted=False,
         uncorrected p-values.   Must be 1-dimensional.
     alpha : float
         FWER, family-wise error rate, e.g. 0.1
-    method : string
+    method : str
         Method used for testing and adjustment of pvalues. Can be either the
         full name or initial letters. Available methods are:
 
@@ -92,9 +97,9 @@ def multipletests(pvals, alpha=0.05, method='hs', is_sorted=False,
 
     Returns
     -------
-    reject : array, boolean
+    reject : ndarray, boolean
         true for hypothesis that can be rejected for given alpha
-    pvals_corrected : array
+    pvals_corrected : ndarray
         p-values corrected for multiple tests
     alphacSidak: float
         corrected alpha for Sidak method
@@ -247,7 +252,7 @@ def multipletests(pvals, alpha=0.05, method='hs', is_sorted=False,
     else:
         raise ValueError('method not recognized')
 
-    if not pvals_corrected is None: #not necessary anymore
+    if pvals_corrected is not None: #not necessary anymore
         pvals_corrected[pvals_corrected>1] = 1
     if is_sorted or returnsorted:
         return reject, pvals_corrected, alphacSidak, alphacBonf
@@ -277,9 +282,9 @@ def fdrcorrection(pvals, alpha=0.05, method='indep', is_sorted=False):
 
     Returns
     -------
-    rejected : array, bool
+    rejected : ndarray, bool
         True if a hypothesis is rejected, False if not
-    pvalue-corrected : array
+    pvalue-corrected : ndarray
         pvalues adjusted for multiple hypothesis testing to limit FDR
 
     Notes
@@ -361,9 +366,9 @@ def fdrcorrection_twostage(pvals, alpha=0.05, method='bky', iter=False,
 
     Returns
     -------
-    rejected : array, bool
+    rejected : ndarray, bool
         True if a hypothesis is rejected, False if not
-    pvalue-corrected : array
+    pvalue-corrected : ndarray
         pvalues adjusted for multiple hypotheses testing to limit FDR
     m0 : int
         ntest - rej, estimated number of true hypotheses
@@ -379,7 +384,7 @@ def fdrcorrection_twostage(pvals, alpha=0.05, method='bky', iter=False,
     linear step-up procedure (fdrcorrection0 with method='indep') corrected
     for the estimated fraction of true hypotheses.
     This means that the rejection decision can be obtained with
-    ``pval_corrected <= alpha``, where ``alpha`` is the origianal significance
+    ``pval_corrected <= alpha``, where ``alpha`` is the original significance
     level.
     (Note: This has changed from earlier versions (<0.5.0) of statsmodels.)
 
@@ -426,7 +431,7 @@ def fdrcorrection_twostage(pvals, alpha=0.05, method='bky', iter=False,
             break
         elif ri < ri_old:
             # prevent cycles and endless loops
-            raise RuntimeError(" oops - shouldn't be here")
+            raise RuntimeError(" oops - should not be here")
         ri_old = ri
 
     # make adjustment to pvalscorr to reflect estimated number of Non-Null cases
@@ -447,28 +452,31 @@ def fdrcorrection_twostage(pvals, alpha=0.05, method='bky', iter=False,
 
 
 def local_fdr(zscores, null_proportion=1.0, null_pdf=None, deg=7,
-              nbins=30):
+              nbins=30, alpha=0):
     """
     Calculate local FDR values for a list of Z-scores.
 
     Parameters
     ----------
-    zscores : array-like
+    zscores : array_like
         A vector of Z-scores
     null_proportion : float
         The assumed proportion of true null hypotheses
     null_pdf : function mapping reals to positive reals
         The density of null Z-scores; if None, use standard normal
-    deg : integer
+    deg : int
         The maximum exponent in the polynomial expansion of the
         density of non-null Z-scores
-    nbins : integer
+    nbins : int
         The number of bins for estimating the marginal density
         of Z-scores.
+    alpha : float
+        Use Poisson ridge regression with parameter alpha to estimate
+        the density of non-null Z-scores.
 
     Returns
     -------
-    fdr : array-like
+    fdr : array_like
         A vector of FDR values
 
     References
@@ -509,14 +517,22 @@ def local_fdr(zscores, null_proportion=1.0, null_pdf=None, deg=7,
     # The design matrix at bin centers
     dmat = np.vander(zbins, deg + 1)
 
-    # Use this to get starting values for Poisson regression
-    md = OLS(np.log(1 + zhist), dmat).fit()
+    # Rescale the design matrix
+    sd = dmat.std(0)
+    ii = sd >1e-8
+    dmat[:, ii] /= sd[ii]
+
+    start = OLS(np.log(1 + zhist), dmat).fit().params
 
     # Poisson regression
-    md = GLM(zhist, dmat, family=families.Poisson()).fit(start_params=md.params)
+    if alpha > 0:
+        md = GLM(zhist, dmat, family=families.Poisson()).fit_regularized(L1_wt=0, alpha=alpha, start_params=start)
+    else:
+        md = GLM(zhist, dmat, family=families.Poisson()).fit(start_params=start)
 
     # The design matrix for all Z-scores
     dmat_full = np.vander(zscores, deg + 1)
+    dmat_full[:, ii] /= sd[ii]
 
     # The height of the estimated marginal density of Z-scores,
     # evaluated at every observed Z-score.
@@ -546,7 +562,7 @@ class NullDistribution(object):
 
     Parameters
     ----------
-    zscores : array-like
+    zscores : array_like
         The observed Z-scores.
     null_lb : float
         Z-scores between `null_lb` and `null_ub` are all considered to be
@@ -668,11 +684,11 @@ class NullDistribution(object):
     # The fitted null density function
     def pdf(self, zscores):
         """
-        Evaluates the fitted emirical null Z-score density.
+        Evaluates the fitted empirical null Z-score density.
 
         Parameters
         ----------
-        zscores : scalar or array-like
+        zscores : scalar or array_like
             The point or points at which the density is to be
             evaluated.
 

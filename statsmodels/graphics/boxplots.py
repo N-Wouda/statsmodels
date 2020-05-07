@@ -3,7 +3,6 @@
 # Author: Ralf Gommers
 # Based on code by Flavio Coelho and Teemu Ikonen.
 
-from statsmodels.compat.python import zip
 import numpy as np
 from scipy.stats import gaussian_kde
 
@@ -14,20 +13,21 @@ __all__ = ['violinplot', 'beanplot']
 
 
 def violinplot(data, ax=None, labels=None, positions=None, side='both',
-               show_boxplot=True, plot_opts={}):
-    """Make a violin plot of each dataset in the `data` sequence.
+               show_boxplot=True, plot_opts=None):
+    """
+    Make a violin plot of each dataset in the `data` sequence.
 
     A violin plot is a boxplot combined with a kernel density estimate of the
     probability density function per point.
 
     Parameters
     ----------
-    data : sequence of ndarrays
+    data : sequence[array_like]
         Data arrays, one array per value in `positions`.
-    ax : Matplotlib AxesSubplot instance, optional
+    ax : AxesSubplot, optional
         If given, this subplot is used to plot in instead of a new figure being
         created.
-    labels : list of str, optional
+    labels : list[str], optional
         Tick labels for the horizontal axis.  If not given, integers
         ``1..len(data)`` are used.
     positions : array_like, optional
@@ -63,7 +63,7 @@ def violinplot(data, ax=None, labels=None, positions=None, side='both',
 
     Returns
     -------
-    fig : Matplotlib figure instance
+    Figure
         If `ax` is None, the created figure.  Otherwise the figure to which
         `ax` is connected.
 
@@ -123,10 +123,9 @@ def violinplot(data, ax=None, labels=None, positions=None, side='both',
     >>> plt.show()
 
     .. plot:: plots/graphics_boxplot_violinplot.py
-
     """
-
-    if np.size(data) == 0:
+    plot_opts = {} if plot_opts is None else plot_opts
+    if max([np.size(arr) for arr in data]) == 0:
         msg = "No Data to make Violin: Try again!"
         raise ValueError(msg)
 
@@ -143,8 +142,7 @@ def violinplot(data, ax=None, labels=None, positions=None, side='both',
 
     # Plot violins.
     for pos_data, pos in zip(data, positions):
-        xvals, violin = _single_violin(ax, pos, pos_data, width, side,
-                                       plot_opts)
+        _single_violin(ax, pos, pos_data, width, side, plot_opts)
 
     if show_boxplot:
         ax.boxplot(data, notch=1, positions=positions, vert=1)
@@ -234,7 +232,8 @@ def _set_ticks_labels(ax, data, labels, positions, plot_opts):
 
 def beanplot(data, ax=None, labels=None, positions=None, side='both',
              jitter=False, plot_opts={}):
-    """Make a bean plot of each dataset in the `data` sequence.
+    """
+    Bean plot of each dataset in a sequence.
 
     A bean plot is a combination of a `violinplot` (kernel density estimate of
     the probability density function per point) with a line-scatter plot of all
@@ -242,12 +241,12 @@ def beanplot(data, ax=None, labels=None, positions=None, side='both',
 
     Parameters
     ----------
-    data : sequence of ndarrays
+    data : sequence[array_like]
         Data arrays, one array per value in `positions`.
-    ax : Matplotlib AxesSubplot instance, optional
+    ax : AxesSubplot
         If given, this subplot is used to plot in instead of a new figure being
         created.
-    labels : list of str, optional
+    labels : list[str], optional
         Tick labels for the horizontal axis.  If not given, integers
         ``1..len(data)`` are used.
     positions : array_like, optional
@@ -289,7 +288,7 @@ def beanplot(data, ax=None, labels=None, positions=None, side='both',
 
     Returns
     -------
-    fig : Matplotlib figure instance
+    Figure
         If `ax` is None, the created figure.  Otherwise the figure to which
         `ax` is connected.
 
@@ -330,7 +329,6 @@ def beanplot(data, ax=None, labels=None, positions=None, side='both',
     >>> plt.show()
 
     .. plot:: plots/graphics_boxplot_beanplot.py
-
     """
     fig, ax = utils.create_mpl_ax(ax)
 

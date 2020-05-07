@@ -18,10 +18,10 @@ http://fedc.wiwi.hu-berlin.de/xplore/ebooks/html/anr/anrhtmlframe62.html
 # pylint: disable-msg=W0142
 # pylint: disable-msg=E1101
 # pylint: disable-msg=E0611
-from statsmodels.compat.python import lzip, lfilter, callable, zip
+from statsmodels.compat.python import lzip, lfilter
 import numpy as np
 import scipy.integrate
-from statsmodels.compat.scipy import factorial
+from scipy.special import factorial
 from numpy import exp, multiply, square, divide, subtract, inf
 
 
@@ -74,7 +74,7 @@ class NdKernel(object):
 
         if len(xs)>0:  ## Need to do product of marginal distributions
             #w = np.sum([self(self._Hrootinv * (xx-x).T ) for xx in xs])/n
-            #vectorized doesn't work:
+            #vectorized does not work:
             if self.weights is not None:
                 w = np.mean(self((xs-x) * self._Hrootinv).T * self.weights)/sum(self.weights)
             else:
@@ -120,7 +120,7 @@ class CustomKernel(object):
         """
         shape should be a function taking and returning numeric type.
 
-        For sanity it should always return positive or zero but this isn't
+        For sanity it should always return positive or zero but this is not
         enforced in case you want to do weird things. Bear in mind that the
         statistical tests etc. may not be valid for non-positive kernels.
 
@@ -170,7 +170,7 @@ class CustomKernel(object):
         def isInDomain(xy):
             """Used for filter to check if point is in the domain"""
             u = (xy[0]-x)/self.h
-            return u >= self.domain[0] and u <= self.domain[1]
+            return np.all((u >= self.domain[0]) & (u <= self.domain[1]))
 
         if self.domain is None:
             return (xs, ys)
@@ -256,7 +256,6 @@ class CustomKernel(object):
         This uses the asymptotic normal approximation to the distribution of
         the density estimate. The lower bound can be negative for density
         values close to zero.
-
         """
         from scipy import stats
         crit = stats.norm.isf(alpha / 2.)

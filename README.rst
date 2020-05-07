@@ -1,9 +1,9 @@
-|Travis Build Status| |Appveyor Build Status| |Coveralls Coverage|
+|Travis Build Status| |Azure CI Build Status| |Appveyor Build Status| |Coveralls Coverage|
 
-About Statsmodels
+About statsmodels
 =================
 
-Statsmodels is a Python package that provides a complement to scipy for
+statsmodels is a Python package that provides a complement to scipy for
 statistical computations including descriptive statistics and estimation
 and inference for statistical models.
 
@@ -25,7 +25,6 @@ https://www.statsmodels.org/stable/release/version0.9.html
 
 Backups of documentation are available at https://statsmodels.github.io/stable/
 and https://statsmodels.github.io/dev/.
-
 
 
 Main Features
@@ -104,7 +103,7 @@ Main Features
 
 * Miscellaneous models
 * Sandbox: statsmodels contains a sandbox folder with code in various stages of
-  developement and testing which is not considered "production ready".  This covers
+  development and testing which is not considered "production ready".  This covers
   among others
 
   - Generalized method of moments (GMM) estimators
@@ -139,6 +138,19 @@ See INSTALL.txt for requirements or see the documentation
 
 https://statsmodels.github.io/dev/install.html
 
+Contributing
+============
+Contributions in any form are welcome, including:
+
+* Documentation improvements
+* Additional tests
+* New features to existing models
+* New models
+
+https://statsmodels.github.io/dev/test_notes.html
+
+for instructions on installing statsmodels in *editable* mode.
+
 License
 =======
 
@@ -147,12 +159,12 @@ Modified BSD (3-clause)
 Discussion and Development
 ==========================
 
-Discussions take place on our mailing list.
+Discussions take place on the mailing list
 
-http://groups.google.com/group/pystatsmodels
+https://groups.google.com/group/pystatsmodels
 
-We are very interested in feedback about usability and suggestions for
-improvements.
+and in the issue tracker. We are very interested in feedback
+about usability and suggestions for improvements.
 
 Bug Reports
 ===========
@@ -163,6 +175,8 @@ https://github.com/statsmodels/statsmodels/issues
 
 .. |Travis Build Status| image:: https://travis-ci.org/statsmodels/statsmodels.svg?branch=master
    :target: https://travis-ci.org/statsmodels/statsmodels
+.. |Azure CI Build Status| image:: https://dev.azure.com/statsmodels/statsmodels-testing/_apis/build/status/statsmodels.statsmodels?branch=master
+   :target: https://dev.azure.com/statsmodels/statsmodels-testing/_build/latest?definitionId=1&branch=master
 .. |Appveyor Build Status| image:: https://ci.appveyor.com/api/projects/status/gx18sd2wc63mfcuc/branch/master?svg=true
    :target: https://ci.appveyor.com/project/josef-pkt/statsmodels/branch/master
 .. |Coveralls Coverage| image:: https://coveralls.io/repos/github/statsmodels/statsmodels/badge.svg?branch=master

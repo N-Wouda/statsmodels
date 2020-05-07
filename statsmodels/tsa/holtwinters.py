@@ -11,17 +11,22 @@ practice. OTexts, 2014.
 Author: Terence L van Zyl
 Modified: Kevin Sheppard
 """
-from statsmodels.compat.python import string_types
-
 import numpy as np
 import pandas as pd
 from scipy.optimize import basinhopping, brute, minimize
 from scipy.spatial.distance import sqeuclidean
 from scipy.special import inv_boxcox
 from scipy.stats import boxcox
+from scipy.stats import (
+    _distn_infrastructure, rv_continuous, rv_discrete
+)
 
+from statsmodels.base.data import PandasData
 from statsmodels.base.model import Results
-from statsmodels.base.wrapper import populate_wrapper, union_dicts, ResultsWrapper
+from statsmodels.base.wrapper import (populate_wrapper, union_dicts,
+                                      ResultsWrapper)
+from statsmodels.tools.validation import (array_like, bool_like, float_like,
+                                          string_like, int_like)
 from statsmodels.tsa.base.tsa_model import TimeSeriesModel
 from statsmodels.tsa.tsatools import freq_to_period
 import statsmodels.tsa._exponential_smoothers as smoothers
@@ -264,21 +269,21 @@ class HoltWintersResults(Results):
     params_formatted: pd.DataFrame
         DataFrame containing all parameters, their short names and a flag
         indicating whether the parameter's value was optimized to fit the data.
-    fittedfcast: array
+    fittedfcast: ndarray
         An array of both the fitted values and forecast values.
-    fittedvalues: array
+    fittedvalues: ndarray
         An array of the fitted values. Fitted by the Exponential Smoothing
         model.
-    fcastvalues: array
+    fcastvalues: ndarray
         An array of the forecast values forecast by the Exponential Smoothing
         model.
     sse: float
         The sum of squared errors
-    level: array
+    level: ndarray
         An array of the levels values that make up the fitted values.
-    slope: array
+    slope: ndarray
         An array of the slope values that make up the fitted values.
-    season: array
+    season: ndarray
         An array of the seasonal values that make up the fitted values.
     aic: float
         The Akaike information criterion.
@@ -286,7 +291,7 @@ class HoltWintersResults(Results):
         The Bayesian information criterion.
     aicc: float
         AIC with a correction for finite sample sizes.
-    resid: array
+    resid: ndarray
         An array of the residuals of the fittedvalues and actual values.
     k: int
         the k parameter used to remove the bias in AIC, BIC etc.
@@ -295,12 +300,6 @@ class HoltWintersResults(Results):
         the data.
     mle_retvals:  {None, scipy.optimize.optimize.OptimizeResult}
         Optimization results if the parameters were optimized to fit the data.
-
-    Methods
-    -------
-    forecast
-    predict
-    summary
     """
 
     def __init__(self, model, params, **kwargs):
@@ -327,7 +326,7 @@ class HoltWintersResults(Results):
 
         Returns
         -------
-        forecast : array
+        forecast : ndarray
             Array of out of sample forecasts.
         """
         return self.model.predict(self.params, start, end)
@@ -344,19 +343,21 @@ class HoltWintersResults(Results):
 
         Returns
         -------
-        forecast : array
+        forecast : ndarray
             Array of out of sample forecasts
         """
         try:
-            start = self.model._index[-1] + 1
-            end = self.model._index[-1] + steps
+            freq = getattr(self.model._index, 'freq', 1)
+            start = self.model._index[-1] + freq
+            end = self.model._index[-1] + steps * freq
             return self.model.predict(self.params, start=start, end=end)
-        except ValueError:
-            # May occur when the index doesn't have a freq
+        except (AttributeError, ValueError):
+            # May occur when the index does not have a freq
             return self.model._predict(h=steps, **self.params).fcastvalues
 
     def summary(self):
-        """Summarize the Model
+        """
+        Summarize the fitted Model
 
         Returns
         -------
@@ -383,7 +384,7 @@ class HoltWintersResults(Results):
                   'mul': 'Multiplicative', 'multiplicative': 'Multiplicative', None: 'None'}
         transform = self.params['use_boxcox']
         box_cox_transform = True if transform else False
-        box_cox_coeff = transform if isinstance(transform, string_types) else self.params['lamda']
+        box_cox_coeff = transform if isinstance(transform, str) else self.params['lamda']
         if isinstance(box_cox_coeff, float):
             box_cox_coeff = '{:>10.5f}'.format(box_cox_coeff)
         top_left = [('Dep. Variable:', [dep_variable]),
@@ -433,6 +434,373 @@ class HoltWintersResults(Results):
 
         return smry
 
+    def simulate(
+        self,
+        nsimulations,
+        anchor=None,
+        repetitions=1,
+        error="add",
+        random_errors=None,
+        random_state=None,
+    ):
+        r"""
+        Random simulations using the state space formulation.
+
+        Parameters
+        ----------
+        nsimulations : int
+            The number of simulation steps.
+        anchor : int, str, or datetime, optional
+            First period for simulation. The simulation will be conditional on
+            all existing datapoints prior to the `anchor`.  Type depends on the
+            index of the given `endog` in the model. Two special cases are the
+            strings 'start' and 'end'. `start` refers to beginning the
+            simulation at the first period of the sample, and `end` refers to
+            beginning the simulation at the first period after the sample.
+            Integer values can run from 0 to `nobs`, or can be negative to
+            apply negative indexing. Finally, if a date/time index was provided
+            to the model, then this argument can be a date string to parse or a
+            datetime type. Default is 'end'.
+        repetitions : int, optional
+            Number of simulated paths to generate. Default is 1 simulated path.
+        error : {"add", "mul", "additive", "multiplicative"}, optional
+            Error model for state space formulation. Default is ``"add"``.
+        random_errors : optional
+            Specifies how the random errors should be obtained. Can be one of
+            the following:
+
+            * ``None``: Random normally distributed values with variance
+              estimated from the fit errors drawn from numpy's standard
+              RNG (can be seeded with the `random_state` argument). This is the
+              default option.
+            * A distribution function from ``scipy.stats``, e.g.
+              ``scipy.stats.norm``: Fits the distribution function to the fit
+              errors and draws from the fitted distribution.
+              Note the difference between ``scipy.stats.norm`` and
+              ``scipy.stats.norm()``, the latter one is a frozen distribution
+              function.
+            * A frozen distribution function from ``scipy.stats``, e.g.
+              ``scipy.stats.norm(scale=2)``: Draws from the frozen distribution
+              function.
+            * A ``np.ndarray`` with shape (`nsimulations`, `repetitions`): Uses
+              the given values as random errors.
+            * ``"bootstrap"``: Samples the random errors from the fit errors.
+
+        random_state : int or np.random.RandomState, optional
+            A seed for the random number generator or a
+            ``np.random.RandomState`` object. Only used if `random_errors` is
+            ``None``. Default is ``None``.
+
+        Returns
+        -------
+        sim : pd.Series, pd.DataFrame or np.ndarray
+            An ``np.ndarray``, ``pd.Series``, or ``pd.DataFrame`` of simulated
+            values.
+            If the original data was a ``pd.Series`` or ``pd.DataFrame``, `sim`
+            will be a ``pd.Series`` if `repetitions` is 1, and a
+            ``pd.DataFrame`` of shape (`nsimulations`, `repetitions`) else.
+            Otherwise, if `repetitions` is 1, a ``np.ndarray`` of shape
+            (`nsimulations`,) is returned, and if `repetitions` is not 1 a
+            ``np.ndarray`` of shape (`nsimulations`, `repetitions`) is
+            returned.
+
+        Notes
+        -----
+        The simulation is based on the state space model of the Holt-Winter's
+        methods. The state space model assumes that the true value at time
+        :math:`t` is randomly distributed around the prediction value.
+        If using the additive error model, this means:
+
+        .. math::
+
+            y_t &= \hat{y}_{t|t-1} + e_t\\
+            e_t &\sim \mathcal{N}(0, \sigma^2)
+
+        Using the multiplicative error model:
+
+        .. math::
+
+            y_t &= \hat{y}_{t|t-1} \cdot (1 + e_t)\\
+            e_t &\sim \mathcal{N}(0, \sigma^2)
+
+        Inserting these equations into the smoothing equation formulation leads
+        to the state space equations. The notation used here follows
+        [1]_.
+
+        Additionally,
+
+        .. math::
+
+           B_t &= b_{t-1} \circ_d \phi\\
+           L_t &= l_{t-1} \circ_b B_t\\
+           S_t &= s_{t-m}\\
+           Y_t &= L_t \circ_s S_t,
+
+        where :math:`\circ_d` is the operation linking trend and damping
+        parameter (multiplication if the trend is additive, power if the trend
+        is multiplicative), :math:`\circ_b` is the operation linking level and
+        trend (addition if the trend is additive, multiplication if the trend
+        is multiplicative), and :math:`\circ_s` is the operation linking
+        seasonality to the rest.
+
+        The state space equations can then be formulated as
+
+        .. math::
+
+           y_t &= Y_t + \eta \cdot e_t\\
+           l_t &= L_t + \alpha \cdot (M_e \cdot L_t + \kappa_l) \cdot e_t\\
+           b_t &= B_t + \beta \cdot (M_e \cdot B_t + \kappa_b) \cdot e_t\\
+           s_t &= S_t + \gamma \cdot (M_e \cdot S_t + \kappa_s) \cdot e_t\\
+
+        with
+
+        .. math::
+
+           \eta &= \begin{cases}
+                       Y_t\quad\text{if error is multiplicative}\\
+                       1\quad\text{else}
+                   \end{cases}\\
+           M_e &= \begin{cases}
+                       1\quad\text{if error is multiplicative}\\
+                       0\quad\text{else}
+                   \end{cases}\\
+
+        and, when using the additve error model,
+
+        .. math::
+
+           \kappa_l &= \begin{cases}
+                       \frac{1}{S_t}\quad
+                       \text{if seasonality is multiplicative}\\
+                       1\quad\text{else}
+                   \end{cases}\\
+           \kappa_b &= \begin{cases}
+                       \frac{\kappa_l}{l_{t-1}}\quad
+                       \text{if trend is multiplicative}\\
+                       \kappa_l\quad\text{else}
+                   \end{cases}\\
+           \kappa_s &= \begin{cases}
+                       \frac{1}{L_t}\quad\text{if seasonality is multiplicative}\\
+                       1\quad\text{else}
+                   \end{cases}
+
+        When using the multiplicative error model
+
+        .. math::
+
+           \kappa_l &= \begin{cases}
+                       0\quad
+                       \text{if seasonality is multiplicative}\\
+                       S_t\quad\text{else}
+                   \end{cases}\\
+           \kappa_b &= \begin{cases}
+                       \frac{\kappa_l}{l_{t-1}}\quad
+                       \text{if trend is multiplicative}\\
+                       \kappa_l + l_{t-1}\quad\text{else}
+                   \end{cases}\\
+           \kappa_s &= \begin{cases}
+                       0\quad\text{if seasonality is multiplicative}\\
+                       L_t\quad\text{else}
+                   \end{cases}
+
+        References
+        ----------
+        .. [1] Hyndman, R.J., & Athanasopoulos, G. (2018) *Forecasting:
+           principles and practice*, 2nd edition, OTexts: Melbourne,
+           Australia. OTexts.com/fpp2. Accessed on February 28th 2020.
+        """
+
+        # check inputs
+        if error in ["additive", "multiplicative"]:
+            error = {"additive": "add", "multiplicative": "mul"}[error]
+        if error not in ["add", "mul"]:
+            raise ValueError("error must be 'add' or 'mul'!")
+
+        # Get the starting location
+        if anchor is None or anchor == "end":
+            start_idx = self.model.nobs
+        elif anchor == "start":
+            start_idx = 0
+        else:
+            start_idx, _, _ = self.model._get_index_loc(anchor)
+            if isinstance(start_idx, slice):
+                start_idx = start_idx.start
+        if start_idx < 0:
+            start_idx += self.model.nobs
+        if start_idx > self.model.nobs:
+            raise ValueError("Cannot anchor simulation outside of the sample.")
+
+        # get Holt-Winters settings and parameters
+        trend = self.model.trend
+        damped = self.model.damped
+        seasonal = self.model.seasonal
+        use_boxcox = self.params["use_boxcox"]
+        lamda = self.params["lamda"]
+        alpha = self.params["smoothing_level"]
+        beta = self.params["smoothing_slope"]
+        gamma = self.params["smoothing_seasonal"]
+        phi = self.params["damping_slope"]
+        # if model has no seasonal component, use 1 as period length
+        m = max(self.model.seasonal_periods, 1)
+        n_params = (
+            2
+            + 2 * self.model.trending
+            + (m + 1) * self.model.seasoning
+            + damped
+        )
+        mul_seasonal = seasonal == "mul"
+        mul_trend = trend == "mul"
+        mul_error = error == "mul"
+
+        # define trend, damping and seasonality operations
+        if mul_trend:
+            op_b = np.multiply
+            op_d = np.power
+            neutral_b = 1
+        else:
+            op_b = np.add
+            op_d = np.multiply
+            neutral_b = 0
+        if mul_seasonal:
+            op_s = np.multiply
+            neutral_s = 1
+        else:
+            op_s = np.add
+            neutral_s = 0
+
+        # set initial values
+        if use_boxcox:
+            level = self.model._untransformed_level
+            slope = self.model._untransformed_slope
+            season = self.model._untransformed_season
+        else:
+            level = self.level
+            slope = self.slope
+            season = self.season
+        # (notation as in https://otexts.com/fpp2/ets.html)
+        y = np.empty((nsimulations, repetitions))
+        # lvl instead of l because of E741
+        lvl = np.empty((nsimulations + 1, repetitions))
+        b = np.empty((nsimulations + 1, repetitions))
+        s = np.empty((nsimulations + m, repetitions))
+        # the following uses python's index wrapping
+        if start_idx == 0:
+            lvl[-1, :] = self.params["initial_level"]
+            b[-1, :] = self.params["initial_slope"]
+        else:
+            lvl[-1, :] = level[start_idx - 1]
+            b[-1, :] = slope[start_idx - 1]
+        if 0 <= start_idx and start_idx <= m:
+            initial_seasons = self.params["initial_seasons"]
+            _s = np.concatenate(
+                (initial_seasons[start_idx:], season[:start_idx],)
+            )
+            s[-m:, :] = np.tile(_s, (repetitions, 1)).T
+        else:
+            s[-m:, :] = np.tile(
+                season[start_idx - m : start_idx], (repetitions, 1),
+            ).T
+
+        # set neutral values for unused features
+        if trend is None:
+            b[:, :] = neutral_b
+            phi = 1
+            beta = 0
+        if seasonal is None:
+            s[:, :] = neutral_s
+            gamma = 0
+        if not damped:
+            phi = 1
+
+        # calculate residuals for error covariance estimation
+        if use_boxcox:
+            fitted = boxcox(self.fittedvalues, lamda)
+        else:
+            fitted = self.fittedvalues
+        if error == "add":
+            resid = self.model._y - fitted
+        else:
+            resid = (self.model._y - fitted) / fitted
+        sigma = np.sqrt(np.sum(resid ** 2) / (len(resid) - n_params))
+
+        # get random error eps
+        if isinstance(random_errors, np.ndarray):
+            if random_errors.shape != (nsimulations, repetitions):
+                raise ValueError(
+                    "If random is an ndarray, it must have shape "
+                    "(nsimulations, repetitions)!"
+                )
+            eps = random_errors
+        elif random_errors == "bootstrap":
+            eps = np.random.choice(
+                resid, size=(nsimulations, repetitions), replace=True
+            )
+        elif random_errors is None:
+            if random_state is None:
+                eps = np.random.randn(nsimulations, repetitions) * sigma
+            elif isinstance(random_state, int):
+                rng = np.random.RandomState(random_state)
+                eps = rng.randn(nsimulations, repetitions) * sigma
+            elif isinstance(random_state, np.random.RandomState):
+                eps = random_state.randn(nsimulations, repetitions) * sigma
+            else:
+                raise ValueError(
+                    "Argument random_state must be None, an integer, "
+                    "or an instance of np.random.RandomState"
+                )
+        elif isinstance(random_errors, (rv_continuous, rv_discrete)):
+            params = random_errors.fit(resid)
+            eps = random_errors.rvs(*params, size=(nsimulations, repetitions))
+        elif isinstance(random_errors, _distn_infrastructure.rv_frozen):
+            eps = random_errors.rvs(size=(nsimulations, repetitions))
+        else:
+            raise ValueError("Argument random_errors has unexpected value!")
+
+        for t in range(nsimulations):
+            B = op_d(b[t - 1, :], phi)
+            L = op_b(lvl[t - 1, :], B)
+            S = s[t - m, :]
+            Y = op_s(L, S)
+            if error == "add":
+                eta = 1
+                kappa_l = 1 / S if mul_seasonal else 1
+                kappa_b = kappa_l / lvl[t - 1, :] if mul_trend else kappa_l
+                kappa_s = 1 / L if mul_seasonal else 1
+            else:
+                eta = Y
+                kappa_l = 0 if mul_seasonal else S
+                kappa_b = (
+                    kappa_l / lvl[t - 1, :]
+                    if mul_trend
+                    else kappa_l + lvl[t - 1, :]
+                )
+                kappa_s = 0 if mul_seasonal else L
+
+            y[t, :] = Y + eta * eps[t, :]
+            lvl[t, :] = L + alpha * (mul_error * L + kappa_l) * eps[t, :]
+            b[t, :] = B + beta * (mul_error * B + kappa_b) * eps[t, :]
+            s[t, :] = S + gamma * (mul_error * S + kappa_s) * eps[t, :]
+
+        if use_boxcox:
+            y = inv_boxcox(y, lamda)
+
+        # Wrap data / squeeze where appropriate
+        use_pandas = isinstance(self.model.data, PandasData)
+        if use_pandas:
+            _, _, _, index = self.model._get_prediction_index(
+                start_idx, start_idx + nsimulations - 1
+            )
+        if repetitions == 1:
+            sim = y.ravel()
+            if use_pandas:
+                sim = pd.Series(sim, index=index, name=self.model.endog_names)
+        else:
+            sim = y
+            if use_pandas:
+                sim = pd.DataFrame(sim, index=index)
+
+        return sim
+
 
 class HoltWintersResultsWrapper(ResultsWrapper):
     _attrs = {'fittedvalues': 'rows',
@@ -455,7 +823,7 @@ class ExponentialSmoothing(TimeSeriesModel):
 
     Parameters
     ----------
-    endog : array-like
+    endog : array_like
         Time series
     trend : {"add", "mul", "additive", "multiplicative", None}, optional
         Type of trend component.
@@ -464,7 +832,8 @@ class ExponentialSmoothing(TimeSeriesModel):
     seasonal : {"add", "mul", "additive", "multiplicative", None}, optional
         Type of seasonal component.
     seasonal_periods : int, optional
-        The number of seasons to consider for the holt winters.
+        The number of periods in a complete seasonal cycle, e.g., 4 for
+        quarterly data or 7 for daily data with a weekly cycle.
 
     Returns
     -------
@@ -473,36 +842,45 @@ class ExponentialSmoothing(TimeSeriesModel):
     Notes
     -----
     This is a full implementation of the holt winters exponential smoothing as
-    per [1]. This includes all the unstable methods as well as the stable
+    per [1]_. This includes all the unstable methods as well as the stable
     methods. The implementation of the library covers the functionality of the
     R library as much as possible whilst still being Pythonic.
 
     References
     ----------
-    [1] Hyndman, Rob J., and George Athanasopoulos. Forecasting: principles
+    .. [1] Hyndman, Rob J., and George Athanasopoulos. Forecasting: principles
         and practice. OTexts, 2014.
     """
 
     def __init__(self, endog, trend=None, damped=False, seasonal=None,
                  seasonal_periods=None, dates=None, freq=None, missing='none'):
-        super(ExponentialSmoothing, self).__init__(
-            endog, None, dates, freq, missing=missing)
+        super(ExponentialSmoothing, self).__init__(endog, None, dates,
+                                                   freq, missing=missing)
+        self.endog = self.endog
+        self._y = self._data = array_like(endog, 'endog', contiguous=True,
+                                          order='C')
+        options = ("add", "mul", "additive", "multiplicative")
+        trend = string_like(trend, 'trend', options=options, optional=True)
         if trend in ['additive', 'multiplicative']:
             trend = {'additive': 'add', 'multiplicative': 'mul'}[trend]
         self.trend = trend
-        self.damped = damped
+        self.damped = bool_like(damped, 'damped')
+        seasonal = string_like(seasonal, 'seasonal', options=options,
+                               optional=True)
         if seasonal in ['additive', 'multiplicative']:
             seasonal = {'additive': 'add', 'multiplicative': 'mul'}[seasonal]
         self.seasonal = seasonal
         self.trending = trend in ['mul', 'add']
         self.seasoning = seasonal in ['mul', 'add']
-        if (self.trend == 'mul' or self.seasonal == 'mul') and np.any(endog <= 0.0):
-            raise ValueError('endog must be strictly positive when using multiplicative '
-                             'trend or seasonal components.')
+        if (self.trend == 'mul' or self.seasonal == 'mul') and \
+                not np.all(self._data > 0.0):
+            raise ValueError('endog must be strictly positive when using'
+                             'multiplicative trend or seasonal components.')
         if self.damped and not self.trending:
             raise ValueError('Can only dampen the trend component')
         if self.seasoning:
-            self.seasonal_periods = seasonal_periods
+            self.seasonal_periods = int_like(seasonal_periods,
+                                             'seasonal_periods', optional=True)
             if seasonal_periods is None:
                 self.seasonal_periods = freq_to_period(self._index_freq)
             if self.seasonal_periods <= 1:
@@ -517,7 +895,7 @@ class ExponentialSmoothing(TimeSeriesModel):
 
         Parameters
         ----------
-        params : array
+        params : ndarray
             The fitted model parameters.
         start : int, str, or datetime
             Zero-indexed observation number at which to start forecasting, ie.,
@@ -530,10 +908,11 @@ class ExponentialSmoothing(TimeSeriesModel):
 
         Returns
         -------
-        predicted values : array
+        predicted values : ndarray
         """
         if start is None:
-            start = self._index[-1] + 1
+            freq = getattr(self._index, 'freq', 1)
+            start = self._index[-1] + freq
         start, end, out_of_sample, prediction_index = self._get_prediction_index(
             start=start, end=end)
         if out_of_sample > 0:
@@ -573,15 +952,15 @@ class ExponentialSmoothing(TimeSeriesModel):
             that the average residual is equal to zero.
         use_basinhopping : bool, optional
             Using Basin Hopping optimizer to find optimal values
-        start_params: array, optional
+        start_params : ndarray, optional
             Starting values to used when optimizing the fit.  If not provided,
             starting values are determined using a combination of grid search
             and reasonable values based on the initial values of the data
-        initial_level: float, optional
+        initial_level : float, optional
             Value to use when initializing the fitted level.
-        initial_slope: float, optional
+        initial_slope : float, optional
             Value to use when initializing the fitted slope.
-        use_brute: bool, optional
+        use_brute : bool, optional
             Search for good starting values using a brute force (grid)
             optimizer. If False, a naive set of starting values is used.
 
@@ -605,14 +984,16 @@ class ExponentialSmoothing(TimeSeriesModel):
         """
         # Variable renames to alpha,beta, etc as this helps with following the
         # mathematical notation in general
-        alpha = smoothing_level
-        beta = smoothing_slope
-        gamma = smoothing_seasonal
-        phi = damping_slope
-        l0 = self._l0 = initial_level
-        b0 = self._b0 = initial_slope
-
-        data = self.endog
+        alpha = float_like(smoothing_level, 'smoothing_level', True)
+        beta = float_like(smoothing_slope, 'smoothing_slope', True)
+        gamma = float_like(smoothing_seasonal, 'smoothing_seasonal', True)
+        phi = float_like(damping_slope, 'damping_slope', True)
+        l0 = self._l0 = float_like(initial_level, 'initial_level', True)
+        b0 = self._b0 = float_like(initial_slope, 'initial_slope', True)
+        if start_params is not None:
+            start_params = array_like(start_params, 'start_params',
+                                      contiguous=True)
+        data = self._data
         damped = self.damped
         seasoning = self.seasoning
         trending = self.trending
@@ -632,10 +1013,8 @@ class ExponentialSmoothing(TimeSeriesModel):
         else:
             lamda = None
             y = data.squeeze()
-        if np.ndim(y) != 1:
-            raise ValueError('Only 1 dimensional data supported')
         self._y = y
-        l = np.zeros(self.nobs)
+        lvls = np.zeros(self.nobs)
         b = np.zeros(self.nobs)
         s = np.zeros(self.nobs + m - 1)
         p = np.zeros(6 + m)
@@ -672,38 +1051,61 @@ class ExponentialSmoothing(TimeSeriesModel):
                 # using guesstimates for the levels
                 txi = xi & np.array([True, True, True, False, False, True] + [False] * m)
                 txi = txi.astype(np.bool)
-                bounds = np.array([(0.0, 1.0), (0.0, 1.0), (0.0, 1.0),
-                                   (0.0, None), (0.0, None), (0.0, 1.0)] + [(None, None), ] * m)
-                args = (txi.astype(np.uint8), p, y, l, b, s, m, self.nobs, max_seen)
+                bounds = ([(0.0, 1.0), (0.0, 1.0), (0.0, 1.0), (0.0, None),
+                           (0.0, None), (0.0, 1.0)] + [(None, None), ] * m)
+                args = (txi.astype(np.uint8), p, y, lvls, b, s, m, self.nobs,
+                        max_seen)
                 if start_params is None and np.any(txi) and use_brute:
-                    res = brute(func, bounds[txi], args, Ns=20, full_output=True, finish=None)
+                    _bounds = [bnd for bnd, flag in zip(bounds, txi) if flag]
+                    res = brute(func, _bounds, args, Ns=20,
+                                full_output=True, finish=None)
                     p[txi], max_seen, _, _ = res
                 else:
                     if start_params is not None:
-                        start_params = np.atleast_1d(np.squeeze(start_params))
                         if len(start_params) != xi.sum():
-                            raise ValueError('start_params must have {0} values but '
-                                             'has {1} instead'.format(len(xi), len(start_params)))
+                            msg = 'start_params must have {0} values but ' \
+                                  'has {1} instead'
+                            nxi, nsp = len(xi), len(start_params)
+                            raise ValueError(msg.format(nxi, nsp))
                         p[xi] = start_params
-                    args = (xi.astype(np.uint8), p, y, l, b, s, m, self.nobs, max_seen)
+                    args = (xi.astype(np.uint8), p, y, lvls, b, s, m,
+                            self.nobs, max_seen)
                     max_seen = func(np.ascontiguousarray(p[xi]), *args)
                 # alpha, beta, gamma, l0, b0, phi = p[:6]
                 # s0 = p[6:]
                 # bounds = np.array([(0.0,1.0),(0.0,1.0),(0.0,1.0),(0.0,None),
                 # (0.0,None),(0.8,1.0)] + [(None,None),]*m)
-                args = (xi.astype(np.uint8), p, y, l, b, s, m, self.nobs, max_seen)
+                args = (xi.astype(np.uint8), p, y, lvls, b, s, m, self.nobs, max_seen)
                 if use_basinhopping:
                     # Take a deeper look in the local minimum we are in to find the best
                     # solution to parameters, maybe hop around to try escape the local
                     # minimum we may be in.
+                    _bounds = [bnd for bnd, flag in zip(bounds, xi) if flag]
                     res = basinhopping(func, p[xi],
-                                       minimizer_kwargs={'args': args, 'bounds': bounds[xi]},
+                                       minimizer_kwargs={'args': args, 'bounds': _bounds},
                                        stepsize=0.01)
                     success = res.lowest_optimization_result.success
                 else:
                     # Take a deeper look in the local minimum we are in to find the best
                     # solution to parameters
-                    res = minimize(func, p[xi], args=args, bounds=bounds[xi])
+                    _bounds = [bnd for bnd, flag in zip(bounds, xi) if flag]
+                    lb, ub = np.asarray(_bounds).T.astype(np.float)
+                    initial_p = p[xi]
+
+                    # Ensure strictly inbounds
+                    loc = initial_p <= lb
+                    upper = ub[loc].copy()
+                    upper[~np.isfinite(upper)] = 100.0
+                    eps = 1e-4
+                    initial_p[loc] = lb[loc] + eps * (upper - lb[loc])
+
+                    loc = initial_p >= ub
+                    lower = lb[loc].copy()
+                    lower[~np.isfinite(lower)] = -100.0
+                    eps = 1e-4
+                    initial_p[loc] = ub[loc] - eps * (ub[loc] - lower)
+
+                    res = minimize(func, initial_p, args=args, bounds=_bounds)
                     success = res.success
 
                 if not success:
@@ -837,10 +1239,10 @@ class ExponentialSmoothing(TimeSeriesModel):
         if seasoning:
             gammac = 1 - gamma
             y_gamma[:] = gamma * y
-        l = np.zeros((self.nobs + h + 1,))
+        lvls = np.zeros((self.nobs + h + 1,))
         b = np.zeros((self.nobs + h + 1,))
         s = np.zeros((self.nobs + h + m + 1,))
-        l[0] = initial_level
+        lvls[0] = initial_level
         b[0] = initial_slope
         s[:m] = initial_seasons
         phi_h = np.cumsum(np.repeat(phi, h + 1)**np.arange(1, h + 1 + 1)
@@ -860,58 +1262,64 @@ class ExponentialSmoothing(TimeSeriesModel):
         nobs = self.nobs
         if seasonal == 'mul':
             for i in range(1, nobs + 1):
-                l[i] = y_alpha[i - 1] / s[i - 1] + \
-                       (alphac * trended(l[i - 1], dampen(b[i - 1], phi)))
+                lvls[i] = y_alpha[i - 1] / s[i - 1] + \
+                       (alphac * trended(lvls[i - 1], dampen(b[i - 1], phi)))
                 if trending:
-                    b[i] = (beta * detrend(l[i], l[i - 1])) + \
+                    b[i] = (beta * detrend(lvls[i], lvls[i - 1])) + \
                            (betac * dampen(b[i - 1], phi))
-                s[i + m - 1] = y_gamma[i - 1] / trended(l[i - 1], dampen(b[i - 1], phi)) + \
+                s[i + m - 1] = y_gamma[i - 1] / trended(lvls[i - 1], dampen(b[i - 1], phi)) + \
                     (gammac * s[i - 1])
             slope = b[1:nobs + 1].copy()
             season = s[m:nobs + m].copy()
-            l[nobs:] = l[nobs]
+            lvls[nobs:] = lvls[nobs]
             if trending:
                 b[:nobs] = dampen(b[:nobs], phi)
                 b[nobs:] = dampen(b[nobs], phi_h)
-            trend = trended(l, b)
+            trend = trended(lvls, b)
             s[nobs + m - 1:] = [s[(nobs - 1) + j % m] for j in range(h + 1 + 1)]
             fitted = trend * s[:-m]
         elif seasonal == 'add':
             for i in range(1, nobs + 1):
-                l[i] = y_alpha[i - 1] - (alpha * s[i - 1]) + \
-                       (alphac * trended(l[i - 1], dampen(b[i - 1], phi)))
+                lvls[i] = y_alpha[i - 1] - (alpha * s[i - 1]) + \
+                       (alphac * trended(lvls[i - 1], dampen(b[i - 1], phi)))
                 if trending:
-                    b[i] = (beta * detrend(l[i], l[i - 1])) + \
+                    b[i] = (beta * detrend(lvls[i], lvls[i - 1])) + \
                            (betac * dampen(b[i - 1], phi))
                 s[i + m - 1] = y_gamma[i - 1] - \
-                    (gamma * trended(l[i - 1], dampen(b[i - 1], phi))) + \
+                    (gamma * trended(lvls[i - 1], dampen(b[i - 1], phi))) + \
                     (gammac * s[i - 1])
             slope = b[1:nobs + 1].copy()
             season = s[m:nobs + m].copy()
-            l[nobs:] = l[nobs]
+            lvls[nobs:] = lvls[nobs]
             if trending:
                 b[:nobs] = dampen(b[:nobs], phi)
                 b[nobs:] = dampen(b[nobs], phi_h)
-            trend = trended(l, b)
+            trend = trended(lvls, b)
             s[nobs + m - 1:] = [s[(nobs - 1) + j % m] for j in range(h + 1 + 1)]
             fitted = trend + s[:-m]
         else:
             for i in range(1, nobs + 1):
-                l[i] = y_alpha[i - 1] + \
-                       (alphac * trended(l[i - 1], dampen(b[i - 1], phi)))
+                lvls[i] = y_alpha[i - 1] + \
+                       (alphac * trended(lvls[i - 1], dampen(b[i - 1], phi)))
                 if trending:
-                    b[i] = (beta * detrend(l[i], l[i - 1])) + \
+                    b[i] = (beta * detrend(lvls[i], lvls[i - 1])) + \
                            (betac * dampen(b[i - 1], phi))
             slope = b[1:nobs + 1].copy()
             season = s[m:nobs + m].copy()
-            l[nobs:] = l[nobs]
+            lvls[nobs:] = lvls[nobs]
             if trending:
                 b[:nobs] = dampen(b[:nobs], phi)
                 b[nobs:] = dampen(b[nobs], phi_h)
-            trend = trended(l, b)
+            trend = trended(lvls, b)
             fitted = trend
-        level = l[1:nobs + 1].copy()
+        level = lvls[1:nobs + 1].copy()
         if use_boxcox or use_boxcox == 'log' or isinstance(use_boxcox, float):
+            # store untransformed values in private attribute, transforming
+            # here is probably a bug
+            self._untransformed_level = level
+            self._untransformed_slope = slope
+            self._untransformed_season = season
+
             fitted = inv_boxcox(fitted, lamda)
             level = inv_boxcox(level, lamda)
             slope = detrend(trend[:nobs], level)
@@ -932,14 +1340,12 @@ class ExponentialSmoothing(TimeSeriesModel):
         resid = data - fitted[:-h - 1]
         if remove_bias:
             fitted += resid.mean()
-        if not damped:
-            phi = np.NaN
         self.params = {'smoothing_level': alpha,
                        'smoothing_slope': beta,
                        'smoothing_seasonal': gamma,
-                       'damping_slope': phi,
-                       'initial_level': l[0],
-                       'initial_slope': b[0],
+                       'damping_slope': phi if damped else np.nan,
+                       'initial_level': lvls[0],
+                       'initial_slope': b[0] / phi if phi > 0 else 0,
                        'initial_seasons': s[:m],
                        'use_boxcox': use_boxcox,
                        'lamda': lamda,
@@ -952,7 +1358,7 @@ class ExponentialSmoothing(TimeSeriesModel):
                'initial_level', 'initial_slope', 'damping_slope']
         idx += ['initial_seasons.{0}'.format(i) for i in range(m)]
 
-        formatted = [alpha, beta, gamma, l[0], b[0], phi]
+        formatted = [alpha, beta, gamma, lvls[0], b[0], phi]
         formatted += s[:m].tolist()
         formatted = list(map(lambda v: np.nan if v is None else v, formatted))
         formatted = np.array(formatted)
@@ -981,7 +1387,7 @@ class SimpleExpSmoothing(ExponentialSmoothing):
 
     Parameters
     ----------
-    endog : array-like
+    endog : array_like
         Time series
 
     Returns
@@ -991,17 +1397,17 @@ class SimpleExpSmoothing(ExponentialSmoothing):
     Notes
     -----
     This is a full implementation of the simple exponential smoothing as
-    per [1].  `SimpleExpSmoothing` is a restricted version of
+    per [1]_.  `SimpleExpSmoothing` is a restricted version of
     :class:`ExponentialSmoothing`.
 
     See Also
-    ---------
+    --------
     ExponentialSmoothing
     Holt
 
     References
     ----------
-    [1] Hyndman, Rob J., and George Athanasopoulos. Forecasting: principles
+    .. [1] Hyndman, Rob J., and George Athanasopoulos. Forecasting: principles
         and practice. OTexts, 2014.
     """
 
@@ -1020,13 +1426,13 @@ class SimpleExpSmoothing(ExponentialSmoothing):
             the value is set then this value will be used as the value.
         optimized : bool, optional
             Estimate model parameters by maximizing the log-likelihood
-        start_params: array, optional
+        start_params : ndarray, optional
             Starting values to used when optimizing the fit.  If not provided,
             starting values are determined using a combination of grid search
             and reasonable values based on the initial values of the data
-        initial_level: float, optional
+        initial_level : float, optional
             Value to use when initializing the fitted level.
-        use_brute: bool, optional
+        use_brute : bool, optional
             Search for good starting values using a brute force (grid)
             optimizer. If False, a naive set of starting values is used.
 
@@ -1057,7 +1463,7 @@ class Holt(ExponentialSmoothing):
 
     Parameters
     ----------
-    endog : array-like
+    endog : array_like
         Time series
     exponential : bool, optional
         Type of trend component.
@@ -1071,16 +1477,16 @@ class Holt(ExponentialSmoothing):
     Notes
     -----
     This is a full implementation of the Holt's exponential smoothing as
-    per [1]. `Holt` is a restricted version of :class:`ExponentialSmoothing`.
+    per [1]_. `Holt` is a restricted version of :class:`ExponentialSmoothing`.
 
     See Also
-    ---------
+    --------
     ExponentialSmoothing
     SimpleExpSmoothing
 
     References
     ----------
-    [1] Hyndman, Rob J., and George Athanasopoulos. Forecasting: principles
+    .. [1] Hyndman, Rob J., and George Athanasopoulos. Forecasting: principles
         and practice. OTexts, 2014.
     """
 
@@ -1107,15 +1513,15 @@ class Holt(ExponentialSmoothing):
             set then this value will be used as the value.
         optimized : bool, optional
             Estimate model parameters by maximizing the log-likelihood
-        start_params: array, optional
+        start_params : ndarray, optional
             Starting values to used when optimizing the fit.  If not provided,
             starting values are determined using a combination of grid search
             and reasonable values based on the initial values of the data
-        initial_level: float, optional
+        initial_level : float, optional
             Value to use when initializing the fitted level.
-        initial_slope: float, optional
+        initial_slope : float, optional
             Value to use when initializing the fitted slope.
-        use_brute: bool, optional
+        use_brute : bool, optional
             Search for good starting values using a brute force (grid)
             optimizer. If False, a naive set of starting values is used.
 
@@ -1137,4 +1543,4 @@ class Holt(ExponentialSmoothing):
         return super(Holt, self).fit(smoothing_level=smoothing_level,
                                      smoothing_slope=smoothing_slope, damping_slope=damping_slope,
                                      optimized=optimized, start_params=start_params,
-                                     initial_level=None, initial_slope=None, use_brute=use_brute)
+                                     initial_level=initial_level, initial_slope=initial_slope, use_brute=use_brute)

@@ -11,12 +11,11 @@ if "%SPHINXBUILD%" == "" (
 set SOURCEDIR=source
 set BUILDDIR=build
 set SPHINXPROJ=statsmodels
-set SPHINXOPTS=-j auto
+set SPHINXOPTS=
 
 set TOOLSPATH=../tools
 set DATASETBUILD=dataset_rst.py
 set NOTEBOOKBUILD=nbgenerate.py
-set FOLDTOC=fold_toc.py
 
 if "%1" == "" goto help
 
@@ -28,7 +27,7 @@ if errorlevel 9009 (
 	echo.to the full path of the 'sphinx-build' executable. Alternatively you
 	echo.may add the Sphinx directory to PATH.
 	echo.
-	echo.If you don't have Sphinx installed, grab it from
+	echo.If you do not have Sphinx installed, grab it from
 	echo.http://sphinx-doc.org/
 	exit /b 1
 )
@@ -42,19 +41,13 @@ if "%1" == "html" (
     python %TOOLSPATH%/%DATASETBUILD%
 )
 
-echo %SPHINXBUILD% -M %1 %SOURCEDIR% %BUILDDIR% %SPHINXOPTS%
-%SPHINXBUILD% -M %1 %SOURCEDIR% %BUILDDIR% %SPHINXOPTS%
+echo %SPHINXBUILD% -b %1 %SOURCEDIR% %BUILDDIR% %SPHINXOPTS%
+%SPHINXBUILD% -b %1 %SOURCEDIR% %BUILDDIR% %SPHINXOPTS%
 if errorlevel 1 exit /b 1
 
 if "%1" == "html" (
-    echo xcopy /s source/examples/notebooks/generated/*.html %BUILDDIR%/html/examples/notebooks/generated
-    xcopy /s source/examples/notebooks/generated/*.html %BUILDDIR%/html/examples/notebooks/generated
-	echo python %TOOLSPATH%/%FOLDTOC% %BUILDDIR%/html/index.html
-	python %TOOLSPATH%/%FOLDTOC% %BUILDDIR%/html/index.html
-	echo python %TOOLSPATH%/%FOLDTOC% %BUILDDIR%/html/examples/index.html ../_static
-	python %TOOLSPATH%/%FOLDTOC% %BUILDDIR%/html/examples/index.html ../_static
-	echo python %TOOLSPATH%/%FOLDTOC% %BUILDDIR%/html/dev/index.html ../_static
-	python %TOOLSPATH%/%FOLDTOC% %BUILDDIR%/html/dev/index.html ../_static
+    echo xcopy /s /y source\examples\notebooks\generated\*.html %BUILDDIR%\html\examples\notebooks\generated\*.html
+    xcopy /s /y source\examples\notebooks\generated\*.html %BUILDDIR%\html\examples\notebooks\generated\*.html
     if NOT EXIST %BUILDDIR%/html/examples/notebooks/generated mkdir %BUILDDIR%\html\examples\notebooks\generated
 )
 

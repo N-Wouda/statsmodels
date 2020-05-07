@@ -1,14 +1,18 @@
 # Additional installation requirements for travis docbuilds
 
 # Install system dependencies
-echo sudo apt-get install graphviz -qq
-sudo apt-get install graphviz -qq
-# Install required packages
-echo conda install sphinx "ipython<7.0" jupyter nbconvert numpydoc tzlocal "testpath<0.4.0" --yes --quiet
-conda install sphinx "ipython<7.0" jupyter nbconvert numpydoc tzlocal "testpath<0.4.0" --yes --quiet
+echo sudo apt-get update
+sudo apt-get update
+
+echo sudo apt-get install graphviz libgfortran3 enchant pandoc -qq
+sudo apt-get install graphviz libgfortran3 enchant pandoc -qq
 # doctr and pdr
-echo pip install colorama doctr pandas-datareader
-pip install colorama doctr pandas-datareader
-# R and dependencies
-echo conda install --channel conda-forge/label/gcc7 rpy2 r-robustbase r-lme4 r-geepack libiconv --yes --quiet
-conda install --channel conda-forge/label/gcc7 rpy2 r-robustbase r-lme4 r-geepack libiconv --yes --quiet
+echo pip install sphinx jupyter nbconvert numpydoc pyyaml doctr pandas-datareader simplegeneric seaborn sphinxcontrib-spelling nbsphinx
+pip install sphinx sphinx-material jupyter nbconvert numpydoc pyyaml doctr pandas-datareader simplegeneric seaborn sphinxcontrib-spelling nbsphinx
+
+# Add pymc3 and theano for statespace_sarimax_pymc3.
+echo conda install theano pymc3 -y
+conda install theano pymc3 -y
+
+# TODO: Remove after numpydoc merger of #221
+pip install git+https://github.com/thequackdaddy/numpydoc.git@getdoc --upgrade || true

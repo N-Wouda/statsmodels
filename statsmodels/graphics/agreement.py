@@ -8,10 +8,11 @@ License: BSD-3
 import numpy as np
 from . import utils
 
+
 def mean_diff_plot(m1, m2, sd_limit=1.96, ax=None, scatter_kwds=None,
                    mean_line_kwds=None, limit_lines_kwds=None):
     """
-    Tukey's Mean Difference Plot.
+    Construct a Tukey/Bland-Altman Mean Difference Plot.
 
     Tukey's Mean Difference Plot (also known as a Bland-Altman plot) is a
     graphical method to analyze the differences between two methods of
@@ -22,35 +23,35 @@ def mean_diff_plot(m1, m2, sd_limit=1.96, ax=None, scatter_kwds=None,
 
     Parameters
     ----------
-    m1, m2: pandas Series or array-like
-    sd_limit : float, default 1.96
+    m1 : array_like
+        A 1-d array.
+    m2 : array_like
+        A 1-d array.
+    sd_limit : float
         The limit of agreements expressed in terms of the standard deviation of
         the differences. If `md` is the mean of the differences, and `sd` is
         the standard deviation of those differences, then the limits of
-        agreement that will be plotted will be
-                       
-                       md - sd_limit * sd, md + sd_limit * sd
-
+        agreement that will be plotted are md +/- sd_limit * sd.
         The default of 1.96 will produce 95% confidence intervals for the means
-        of the differences.
-        If sd_limit = 0, no limits will be plotted, and the ylimit of the plot
-        defaults to 3 standard deviatons on either side of the mean.
-    ax: matplotlib AxesSubplot instance, optional
+        of the differences. If sd_limit = 0, no limits will be plotted, and
+        the ylimit of the plot defaults to 3 standard deviations on either
+        side of the mean.
+    ax : AxesSubplot
         If `ax` is None, then a figure is created. If an axis instance is
         given, the mean difference plot is drawn on the axis.
-    scatter_kwargs: keywords
+    scatter_kwds : dict
         Options to to style the scatter plot. Accepts any keywords for the
         matplotlib Axes.scatter plotting method
-    mean_line_kwds: keywords
+    mean_line_kwds : dict
         Options to to style the scatter plot. Accepts any keywords for the
         matplotlib Axes.axhline plotting method
-    limit_lines_kwds: keywords
+    limit_lines_kwds : dict
         Options to to style the scatter plot. Accepts any keywords for the
         matplotlib Axes.axhline plotting method
 
     Returns
     -------
-    fig : matplotlib Figure
+    Figure
         If `ax` is None, the created figure.  Otherwise the figure to which
         `ax` is connected.
 
@@ -59,7 +60,7 @@ def mean_diff_plot(m1, m2, sd_limit=1.96, ax=None, scatter_kwds=None,
     Bland JM, Altman DG (1986). "Statistical methods for assessing agreement
     between two methods of clinical measurement"
 
-    Example
+    Examples
     --------
 
     Load relevant libraries.

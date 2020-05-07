@@ -1,5 +1,3 @@
-from __future__ import division
-
 import numpy as np
 from numpy.testing import assert_almost_equal
 from statsmodels.datasets import star98
@@ -10,7 +8,6 @@ from .results.el_results import DescStatRes
 class GenRes(object):
     """
     Reads in the data and creates class instance to be tested
-
     """
     @classmethod
     def setup_class(cls):
@@ -55,8 +52,8 @@ class TestDescriptiveStatistics(GenRes):
 
     def test_mv_test_mean_weights(self):
         assert_almost_equal(self.mvres1.mv_test_mean(np.array([14, 56]),
-                                        return_weights=1)[2],
-                                        self.res2.mv_test_mean_wts, 4)
+                                                     return_weights=1)[2],
+                            self.res2.mv_test_mean_wts, 4)
 
     def test_test_skew(self):
         assert_almost_equal(self.res1.test_skew(0),

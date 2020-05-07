@@ -1,0 +1,30 @@
+# build
+cython>=0.29
+
+# run
+matplotlib>=2.2
+# Remove due to failures on azure CI
+# cvxopt; os_name != "win32"
+
+# test
+pytest
+pytest-randomly
+# Pin to 1.29 due to test discovery issues
+pytest-xdist==1.29
+
+# code quality
+flake8
+isort
+
+# doc
+sphinx
+sphinx-material; python_version > '3.5'
+jupyter
+notebook
+nbsphinx
+nbconvert
+pyyaml
+pandas-datareader
+simplegeneric
+seaborn
+numpydoc

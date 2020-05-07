@@ -8,10 +8,8 @@ License: BSD-3
 
 """
 
-from statsmodels.compat.python import range
 import numpy as np
-import statsmodels.base.model as base
-from statsmodels.regression.linear_model import OLS, GLS, WLS, RegressionResults
+from statsmodels.regression.linear_model import OLS, GLS, WLS
 
 
 def atleast_2dcols(x):
@@ -133,7 +131,6 @@ class GLSHet(WLS):
     Usage : see example ....
 
     TODO: test link option
-
     """
     def __init__(self, endog, exog, exog_var=None, weights=None, link=None):
         self.exog_var = atleast_2dcols(exog_var)
@@ -160,7 +157,7 @@ class GLSHet(WLS):
 
         Parameters
         ----------
-        maxiter : integer, optional
+        maxiter : int, optional
             the number of iterations
 
         Notes
@@ -176,7 +173,6 @@ class GLSHet(WLS):
         Repeated calls to fit_iterative, will do one redundant pinv_wexog
         calculation. Calling fit_iterative(maxiter) ones does not do any
         redundant recalculations (whitening or calculating pinv_wexog).
-
         """
 
         import collections

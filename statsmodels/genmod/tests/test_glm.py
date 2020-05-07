@@ -1,25 +1,24 @@
 """
 Test functions for models.GLM
 """
-from __future__ import division
-from statsmodels.compat import range
-
+import warnings
 import os
 import numpy as np
 from numpy.testing import (assert_almost_equal, assert_equal, assert_raises,
-                           assert_allclose, assert_, assert_array_less, dec)
+                           assert_allclose, assert_, assert_array_less)
+import pandas as pd
+from pandas.testing import assert_series_equal
 import pytest
 from scipy import stats
+
 import statsmodels.api as sm
 from statsmodels.genmod.generalized_linear_model import GLM
 from statsmodels.tools.tools import add_constant
 from statsmodels.tools.sm_exceptions import PerfectSeparationError
 from statsmodels.discrete import discrete_model as discrete
 from statsmodels.tools.sm_exceptions import DomainWarning
-from statsmodels.tools.numdiff import (approx_fprime, approx_fprime_cs,
-                                       approx_hess)
-import pytest
-import warnings
+from statsmodels.tools.numdiff import approx_fprime, approx_hess
+from statsmodels.datasets import cpunish
 
 # Test Precisions
 DECIMAL_4 = 4
@@ -60,7 +59,8 @@ class CheckModelResultsMixin(object):
 
     decimal_bse = DECIMAL_4
     def test_standard_errors(self):
-        assert_almost_equal(self.res1.bse, self.res2.bse, self.decimal_bse)
+        assert_allclose(self.res1.bse, self.res2.bse,
+                        atol=10**(-self.decimal_bse), rtol=1e-5)
 
     decimal_resids = DECIMAL_4
     def test_residuals(self):
@@ -84,7 +84,7 @@ class CheckModelResultsMixin(object):
 
     def test_aic_R(self):
         # R includes the estimation of the scale as a lost dof
-        # Doesn't with Gamma though
+        # Does not with Gamma though
         if self.res1.scale != 1:
             dof = 2
         else:
@@ -169,8 +169,10 @@ class CheckModelResultsMixin(object):
         pvalues = stats.norm.sf(np.abs(tvalues)) * 2
         half_width = stats.norm.isf(0.025) * self.res1.bse
         conf_int = np.column_stack((params - half_width, params + half_width))
-
-        assert_almost_equal(self.res1.tvalues, tvalues)
+        if isinstance(tvalues, pd.Series):
+            assert_series_equal(self.res1.tvalues, tvalues)
+        else:
+            assert_almost_equal(self.res1.tvalues, tvalues)
         assert_almost_equal(self.res1.pvalues, pvalues)
         assert_almost_equal(self.res1.conf_int(), conf_int)
 
@@ -179,9 +181,12 @@ class CheckModelResultsMixin(object):
             assert_allclose(self.res1.pearson_chi2, self.res2.pearson_chi2,
                             atol=1e-6, rtol=1e-6)
 
+    @pytest.mark.smoke
     def test_summary(self):
-        #SMOKE test
         self.res1.summary()
+
+    @pytest.mark.smoke
+    def test_summary2(self):
         self.res1.summary2()
 
 
@@ -254,7 +259,7 @@ class TestGlmGaussian(CheckModelResultsMixin):
 
     def test_compare_OLS(self):
         res1 = self.res1
-        # OLS doesn't define score_obs
+        # OLS does not define score_obs
         from statsmodels.regression.linear_model import OLS
         resd = OLS(self.data.endog, self.data.exog).fit()
         self.resd = resd  # attach to access from the outside
@@ -274,6 +279,7 @@ class TestGlmGaussian(CheckModelResultsMixin):
         # low precision because of badly scaled exog
         assert_allclose(hess_obs1, hess_obsd, rtol=1e-8)
 
+# FIXME: enable or delete
 #    def setup(self):
 #        if skipR:
 #            raise SkipTest, "Rpy not installed."
@@ -281,6 +287,28 @@ class TestGlmGaussian(CheckModelResultsMixin):
 #        self.res2 = RModel(self.data.endog, self.data.exog, r.glm, family=Gauss)
 #        self.res2.resids = np.array(self.res2.resid)[:,None]*np.ones((1,5))
 #        self.res2.null_deviance = 185008826 # taken from R. Rpy bug?
+
+
+class TestGlmGaussianGradient(TestGlmGaussian):
+    @classmethod
+    def setup_class(cls):
+        '''
+        Test Gaussian family with canonical identity link
+        '''
+        # Test Precisions
+        cls.decimal_resids = DECIMAL_3
+        cls.decimal_params = DECIMAL_2
+        cls.decimal_bic = DECIMAL_0
+        cls.decimal_bse = DECIMAL_2
+
+        from statsmodels.datasets.longley import load
+        cls.data = load(as_pandas=False)
+        cls.data.exog = add_constant(cls.data.exog, prepend=False)
+        cls.res1 = GLM(cls.data.endog, cls.data.exog,
+                        family=sm.families.Gaussian()).fit(method='bfgs')
+        from .results.results_glm import Longley
+        cls.res2 = Longley()
+
 
 class TestGaussianLog(CheckModelResultsMixin):
     @classmethod
@@ -305,6 +333,7 @@ class TestGaussianLog(CheckModelResultsMixin):
         from .results.results_glm import GaussianLog
         cls.res2 = GaussianLog()
 
+# FIXME: enable or delete
 #    def setup(cls):
 #        if skipR:
 #            raise SkipTest, "Rpy not installed"
@@ -335,6 +364,7 @@ class TestGaussianInverse(CheckModelResultsMixin):
         from .results.results_glm import GaussianInverse
         cls.res2 = GaussianInverse()
 
+# FIXME: enable or delete
 #    def setup(cls):
 #        if skipR:
 #            raise SkipTest, "Rpy not installed."
@@ -355,38 +385,70 @@ class TestGlmBinomial(CheckModelResultsMixin):
         from .results.results_glm import Star98
         data = load(as_pandas=False)
         data.exog = add_constant(data.exog, prepend=False)
-        cls.res1 = GLM(data.endog, data.exog, \
-        family=sm.families.Binomial()).fit()
-        #NOTE: if you want to replicate with RModel
-        #res2 = RModel(data.endog[:,0]/trials, data.exog, r.glm,
+        cls.res1 = GLM(data.endog, data.exog,
+                       family=sm.families.Binomial()).fit()
+        # NOTE: if you want to replicate with RModel
+        # res2 = RModel(data.endog[:,0]/trials, data.exog, r.glm,
         #        family=r.binomial, weights=trials)
 
         cls.res2 = Star98()
 
-#TODO:
-#Non-Canonical Links for the Binomial family require the algorithm to be
-#slightly changed
-#class TestGlmBinomialLog(CheckModelResultsMixin):
+    def test_endog_dtype(self):
+        from statsmodels.datasets.star98 import load
+        data = load(as_pandas=False)
+        data.exog = add_constant(data.exog, prepend=False)
+        endog = data.endog.astype(np.int)
+        res2 = GLM(endog, data.exog, family=sm.families.Binomial()).fit()
+        assert_allclose(res2.params, self.res1.params)
+        endog = data.endog.astype(np.double)
+        res3 = GLM(endog, data.exog, family=sm.families.Binomial()).fit()
+        assert_allclose(res3.params, self.res1.params)
+
+    def test_invalid_endog(self, reset_randomstate):
+        # GH2733 inspired check
+        endog = np.random.randint(0, 100, size=(1000, 3))
+        exog = np.random.standard_normal((1000, 2))
+        with pytest.raises(ValueError, match='endog has more than 2 columns'):
+            GLM(endog, exog, family=sm.families.Binomial())
+
+    def test_invalid_endog_formula(self, reset_randomstate):
+        # GH2733
+        n = 200
+        exog = np.random.normal(size=(n, 2))
+        endog = np.random.randint(0, 3, size=n).astype(str)
+        # formula interface
+        data = pd.DataFrame({"y": endog, "x1": exog[:, 0], "x2": exog[:, 1]})
+        with pytest.raises(ValueError, match='array with multiple columns'):
+            sm.GLM.from_formula("y ~ x1 + x2", data,
+                                family=sm.families.Binomial())
+
+
+# FIXME: enable/xfail/skip or delete
+# TODO:
+# Non-Canonical Links for the Binomial family require the algorithm to be
+# slightly changed
+# class TestGlmBinomialLog(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBinomialLogit(CheckModelResultsMixin):
+# class TestGlmBinomialLogit(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBinomialProbit(CheckModelResultsMixin):
+# class TestGlmBinomialProbit(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBinomialCloglog(CheckModelResultsMixin):
+# class TestGlmBinomialCloglog(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBinomialPower(CheckModelResultsMixin):
+# class TestGlmBinomialPower(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBinomialLoglog(CheckModelResultsMixin):
+# class TestGlmBinomialLoglog(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBinomialLogc(CheckModelResultsMixin):
-#TODO: need include logc link
+# class TestGlmBinomialLogc(CheckModelResultsMixin):
+# TODO: need include logc link
 #    pass
+
 
 class TestGlmBernoulli(CheckModelResultsMixin, CheckComparisonMixin):
     @classmethod
@@ -394,11 +456,10 @@ class TestGlmBernoulli(CheckModelResultsMixin, CheckComparisonMixin):
         from .results.results_glm import Lbw
         cls.res2 = Lbw()
         cls.res1 = GLM(cls.res2.endog, cls.res2.exog,
-                family=sm.families.Binomial()).fit()
+                       family=sm.families.Binomial()).fit()
 
         modd = discrete.Logit(cls.res2.endog, cls.res2.exog)
         cls.resd = modd.fit(start_params=cls.res1.params * 0.9, disp=False)
-
 
     def test_score_r(self):
         res1 = self.res1
@@ -416,7 +477,7 @@ class TestGlmBernoulli(CheckModelResultsMixin, CheckComparisonMixin):
         select = list(range(9))
         select.pop(7)
 
-        res1b = GLM(res2.endog, res2.exog[:, select],
+        res1b = GLM(res2.endog, res2.exog.iloc[:, select],
                     family=sm.families.Binomial()).fit()
         tres = res1b.model.score_test(res1b.params,
                                       exog_extra=res1.model.exog[:, -2])
@@ -440,26 +501,27 @@ class TestGlmBernoulli(CheckModelResultsMixin, CheckComparisonMixin):
         s**2
         """
 
-#class TestGlmBernoulliIdentity(CheckModelResultsMixin):
+# class TestGlmBernoulliIdentity(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBernoulliLog(CheckModelResultsMixin):
+# class TestGlmBernoulliLog(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBernoulliProbit(CheckModelResultsMixin):
+# class TestGlmBernoulliProbit(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBernoulliCloglog(CheckModelResultsMixin):
+# class TestGlmBernoulliCloglog(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBernoulliPower(CheckModelResultsMixin):
+# class TestGlmBernoulliPower(CheckModelResultsMixin):
 #    pass
 
-#class TestGlmBernoulliLoglog(CheckModelResultsMixin):
+# class TestGlmBernoulliLoglog(CheckModelResultsMixin):
 #    pass
 
-#class test_glm_bernoulli_logc(CheckModelResultsMixin):
+# class test_glm_bernoulli_logc(CheckModelResultsMixin):
 #    pass
+
 
 class TestGlmGamma(CheckModelResultsMixin):
 
@@ -483,8 +545,9 @@ class TestGlmGamma(CheckModelResultsMixin):
         cls.res1 = res1
 #        res2 = RModel(data.endog, data.exog, r.glm, family=r.Gamma)
         res2 = Scotvote()
-        res2.aic_R += 2 # R doesn't count degree of freedom for scale with gamma
+        res2.aic_R += 2 # R does not count degree of freedom for scale with gamma
         cls.res2 = res2
+
 
 class TestGlmGammaLog(CheckModelResultsMixin):
     @classmethod
@@ -500,6 +563,7 @@ class TestGlmGammaLog(CheckModelResultsMixin):
             family=sm.families.Gamma(link=sm.families.links.log())).fit()
         cls.res2 = res2
 
+# FIXME: enable or delete
 #    def setup(cls):
 #        if skipR:
 #            raise SkipTest, "Rpy not installed."
@@ -507,6 +571,7 @@ class TestGlmGammaLog(CheckModelResultsMixin):
 #            family=r.Gamma(link="log"))
 #        cls.res2.null_deviance = 27.92207137420696 # From R (bug in rpy)
 #        cls.res2.bic = -154.1582089453923 # from Stata
+
 
 class TestGlmGammaIdentity(CheckModelResultsMixin):
     @classmethod
@@ -521,12 +586,11 @@ class TestGlmGammaIdentity(CheckModelResultsMixin):
         res2 = CancerIdentity()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            cls.res1 = GLM(res2.endog, res2.exog,
-                           family=sm.families.Gamma(
-                                link=sm.families.links.identity())
-                            ).fit()
+            fam = sm.families.Gamma(link=sm.families.links.identity())
+            cls.res1 = GLM(res2.endog, res2.exog, family=fam).fit()
         cls.res2 = res2
 
+# FIXME: enable or delete
 #    def setup(cls):
 #        if skipR:
 #            raise SkipTest, "Rpy not installed."
@@ -543,12 +607,11 @@ class TestGlmPoisson(CheckModelResultsMixin, CheckComparisonMixin):
         Test results were obtained by R.
         '''
         from .results.results_glm import Cpunish
-        from statsmodels.datasets.cpunish import load
-        cls.data = load(as_pandas=False)
-        cls.data.exog[:,3] = np.log(cls.data.exog[:,3])
+        cls.data = cpunish.load(as_pandas=False)
+        cls.data.exog[:, 3] = np.log(cls.data.exog[:, 3])
         cls.data.exog = add_constant(cls.data.exog, prepend=False)
         cls.res1 = GLM(cls.data.endog, cls.data.exog,
-                    family=sm.families.Poisson()).fit()
+                       family=sm.families.Poisson()).fit()
         cls.res2 = Cpunish()
         # compare with discrete, start close to save time
         modd = discrete.Poisson(cls.data.endog, cls.data.exog)
@@ -559,6 +622,7 @@ class TestGlmPoisson(CheckModelResultsMixin, CheckComparisonMixin):
 
 #class TestGlmPoissonPower(CheckModelResultsMixin):
 #    pass
+
 
 class TestGlmInvgauss(CheckModelResultsMixin):
     @classmethod
@@ -583,6 +647,7 @@ class TestGlmInvgauss(CheckModelResultsMixin):
         cls.res1 = res1
         cls.res2 = res2
 
+
 class TestGlmInvgaussLog(CheckModelResultsMixin):
     @classmethod
     def setup_class(cls):
@@ -597,6 +662,7 @@ class TestGlmInvgaussLog(CheckModelResultsMixin):
                 link=sm.families.links.log())).fit()
         cls.res2 = res2
 
+# FIXME: enable or delete
 #    def setup(cls):
 #        if skipR:
 #            raise SkipTest, "Rpy not installed."
@@ -604,6 +670,7 @@ class TestGlmInvgaussLog(CheckModelResultsMixin):
 #            family=r.inverse_gaussian(link="log"))
 #        cls.res2.null_deviance = 335.1539777981053 # from R, Rpy bug
 #        cls.res2.llf = -12162.72308 # from Stata, R's has big rounding diff
+
 
 class TestGlmInvgaussIdentity(CheckModelResultsMixin):
     @classmethod
@@ -623,6 +690,7 @@ class TestGlmInvgaussIdentity(CheckModelResultsMixin):
         from .results.results_glm import InvGaussIdentity
         cls.res2 = InvGaussIdentity()
 
+# FIXME: enable or delete
 #    def setup(cls):
 #        if skipR:
 #            raise SkipTest, "Rpy not installed."
@@ -630,6 +698,7 @@ class TestGlmInvgaussIdentity(CheckModelResultsMixin):
 #            family=r.inverse_gaussian(link="identity"))
 #        cls.res2.null_deviance = 335.1539777981053 # from R, Rpy bug
 #        cls.res2.llf = -12163.25545    # from Stata, big diff with R
+
 
 class TestGlmNegbinomial(CheckModelResultsMixin):
     @classmethod
@@ -657,23 +726,27 @@ class TestGlmNegbinomial(CheckModelResultsMixin):
                 family=fam).fit(scale='x2')
         from .results.results_glm import Committee
         res2 = Committee()
-        res2.aic_R += 2 # They don't count a degree of freedom for the scale
+        res2.aic_R += 2 # They do not count a degree of freedom for the scale
         cls.res2 = res2
 
+# FIXME: enable or delete
 #    def setup(self):
 #        if skipR:
 #            raise SkipTest, "Rpy not installed"
-#        r.library('MASS')  # this doesn't work when done in rmodelwrap?
+#        r.library('MASS')  # this does not work when done in rmodelwrap?
 #        self.res2 = RModel(self.data.endog, self.data.exog, r.glm,
 #                family=r.negative_binomial(1))
 #        self.res2.null_deviance = 27.8110469364343
 
+# FIXME: enable/xfail/skip or delete
 #class TestGlmNegbinomial_log(CheckModelResultsMixin):
 #    pass
 
+# FIXME: enable/xfail/skip or delete
 #class TestGlmNegbinomial_power(CheckModelResultsMixin):
 #    pass
 
+# FIXME: enable/xfail/skip or delete
 #class TestGlmNegbinomial_nbinom(CheckModelResultsMixin):
 #    pass
 
@@ -682,18 +755,17 @@ class TestGlmPoissonOffset(CheckModelResultsMixin):
     @classmethod
     def setup_class(cls):
         from .results.results_glm import Cpunish_offset
-        from statsmodels.datasets.cpunish import load
         cls.decimal_params = DECIMAL_4
         cls.decimal_bse = DECIMAL_4
         cls.decimal_aic_R = 3
-        data = load(as_pandas=False)
-        data.exog[:,3] = np.log(data.exog[:,3])
+        data = cpunish.load(as_pandas=False)
+        data.exog[:, 3] = np.log(data.exog[:, 3])
         data.exog = add_constant(data.exog, prepend=True)
         exposure = [100] * len(data.endog)
         cls.data = data
         cls.exposure = exposure
         cls.res1 = GLM(data.endog, data.exog, family=sm.families.Poisson(),
-                    exposure=exposure).fit()
+                       exposure=exposure).fit()
         cls.res2 = Cpunish_offset()
 
     def test_missing(self):
@@ -788,7 +860,7 @@ def test_perfect_pred():
         assert_raises(PerfectSeparationError, glm.fit)
 
 
-def test_score_test_OLS():
+def test_score_test_ols():
     # nicer example than Longley
     from statsmodels.regression.linear_model import OLS
     np.random.seed(5)
@@ -821,7 +893,7 @@ def test_attribute_writable_resettable():
     assert_equal(glm_model2.family.link.power, 1.0)
 
 
-class Test_start_params(CheckModelResultsMixin):
+class TestStartParams(CheckModelResultsMixin):
     @classmethod
     def setup_class(cls):
         '''
@@ -875,10 +947,9 @@ def test_loglike_no_opt():
 def test_formula_missing_exposure():
     # see 2083
     import statsmodels.formula.api as smf
-    import pandas as pd
 
     d = {'Foo': [1, 2, 10, 149], 'Bar': [1, 2, 3, np.nan],
-         'constant': [1] * 4, 'exposure' : np.random.uniform(size=4),
+         'constant': [1] * 4, 'exposure': np.random.uniform(size=4),
          'x': [1, 3, 2, 1.5]}
     df = pd.DataFrame(d)
 
@@ -961,22 +1032,21 @@ def gen_endog(lin_pred, family_class, link, binom_version=0):
     elif family_class == fam.Gamma:
         endog = np.random.gamma(2, mu)
     elif family_class == fam.Gaussian:
-        endog = mu + np.random.normal(size=len(lin_pred))
+        endog = mu + 2 * np.random.normal(size=len(lin_pred))
     elif family_class == fam.NegativeBinomial:
         from scipy.stats.distributions import nbinom
         endog = nbinom.rvs(mu, 0.5)
     elif family_class == fam.InverseGaussian:
         from scipy.stats.distributions import invgauss
-        endog = invgauss.rvs(mu)
+        endog = invgauss.rvs(mu, scale=20)
     else:
         raise ValueError
 
     return endog
 
 
+@pytest.mark.smoke
 def test_summary():
-    # Smoke test for summary.
-
     np.random.seed(4323)
 
     n = 100
@@ -984,7 +1054,7 @@ def test_summary():
     exog[:, 0] = 1
     endog = np.random.normal(size=n)
 
-    for method in "irls", "cg":
+    for method in ["irls", "cg"]:
         fa = sm.families.Gaussian()
         model = sm.GLM(endog, exog, family=fa)
         rslt = model.fit(method=method)
@@ -998,7 +1068,6 @@ def check_score_hessian(results):
     # avoid checking score at MLE, score close to zero
     sc = results.model.score(params * 0.98, scale=1)
     # cs currently (0.9) does not work for all families
-    # sc2 = approx_fprime_cs(params * 0.98, results.model.loglike)
     llfunc = lambda x: results.model.loglike(x, scale=1)
     sc2 = approx_fprime(params * 0.98, llfunc)
     assert_allclose(sc, sc2, rtol=0.05)
@@ -1114,8 +1183,14 @@ def test_gradient_irls():
                     ehess = mod_gradient.hessian(rslt_gradient.params, observed=False)
                     gradient_bse = np.sqrt(-np.diag(np.linalg.inv(ehess)))
                     assert_allclose(gradient_bse, rslt_irls.bse, rtol=1e-6, atol=5e-5)
+                    # rslt_irls.bse corresponds to observed=True
+                    assert_allclose(rslt_gradient.bse, rslt_irls.bse, rtol=0.2, atol=5e-5)
 
-
+                    rslt_gradient_eim = mod_gradient.fit(max_start_irls=0,
+                                                         cov_type='eim',
+                                                         start_params=rslt_gradient.params,
+                                                         method="newton", maxiter=300)
+                    assert_allclose(rslt_gradient_eim.bse, rslt_irls.bse, rtol=5e-5, atol=0)
 
 
 def test_gradient_irls_eim():
@@ -1266,8 +1341,7 @@ class CheckWtdDuplicationMixin(object):
 
     @classmethod
     def setup_class(cls):
-        from statsmodels.datasets.cpunish import load
-        cls.data = load(as_pandas=False)
+        cls.data = cpunish.load(as_pandas=False)
         cls.endog = cls.data.endog
         cls.exog = cls.data.exog
         np.random.seed(1234)
@@ -1286,7 +1360,7 @@ class CheckWtdDuplicationMixin(object):
 
     decimal_resids = DECIMAL_4
 
-    # TODO: This doesn't work... Arrays are of different shape.
+    # TODO: This does not work... Arrays are of different shape.
     # Perhaps we use self.res1.model.family.resid_XXX()?
     """
     def test_residuals(self):
@@ -1305,7 +1379,7 @@ class CheckWtdDuplicationMixin(object):
 
     def test_aic(self):
         # R includes the estimation of the scale as a lost dof
-        # Doesn't with Gamma though
+        # Does not with Gamma though
         assert_allclose(self.res1.aic, self.res2.aic,  atol=1e-6, rtol=1e-6)
 
     def test_deviance(self):
@@ -1513,7 +1587,7 @@ class TestWtdGlmInverseGaussian(CheckWtdDuplicationMixin):
     @classmethod
     def setup_class(cls):
         '''
-        Tests InverseGuassian family with log link.
+        Tests InverseGaussian family with log link.
         '''
         super(TestWtdGlmInverseGaussian, cls).setup_class()
         family_link = sm.families.InverseGaussian(sm.families.links.log())
@@ -1612,21 +1686,20 @@ class TestWtdTweediePower2(CheckWtdDuplicationMixin):
         '''
         Tests Tweedie family with Power(1) link and var_power=2.
         '''
-        from statsmodels.datasets.cpunish import load_pandas
-        cls.data = load_pandas()
+        cls.data = cpunish.load_pandas()
         cls.endog = cls.data.endog
         cls.exog = cls.data.exog[['INCOME', 'SOUTH']]
         np.random.seed(1234)
         cls.weight = np.random.randint(5, 100, len(cls.endog))
         cls.endog_big = np.repeat(cls.endog.values, cls.weight)
         cls.exog_big = np.repeat(cls.exog.values, cls.weight, axis=0)
-        link = sm.families.links.Power
+        link = sm.families.links.Power()
         family_link = sm.families.Tweedie(link=link, var_power=2)
         cls.res1 = GLM(cls.endog, cls.exog,
-                        freq_weights=cls.weight,
-                        family=family_link).fit()
+                       freq_weights=cls.weight,
+                       family=family_link).fit()
         cls.res2 = GLM(cls.endog_big, cls.exog_big,
-                        family=family_link).fit()
+                       family=family_link).fit()
 
 
 class TestWtdTweediePower15(CheckWtdDuplicationMixin):
@@ -1646,9 +1719,8 @@ class TestWtdTweediePower15(CheckWtdDuplicationMixin):
 
 
 def test_wtd_patsy_missing():
-    from statsmodels.datasets.cpunish import load
     import pandas as pd
-    data = load(as_pandas=False)
+    data = cpunish.load(as_pandas=False)
     data.exog[0, 0] = np.nan
     data.endog[[2, 4, 6, 8]] = np.nan
     data.pandas = pd.DataFrame(data.exog, columns=data.exog_name)
@@ -1669,28 +1741,28 @@ def test_wtd_patsy_missing():
 
 class CheckTweedie(object):
     def test_resid(self):
-        l = len(self.res1.resid_response) - 1
-        l2 = len(self.res2.resid_response) - 1
+        idx1 = len(self.res1.resid_response) - 1
+        idx2 = len(self.res2.resid_response) - 1
         assert_allclose(np.concatenate((self.res1.resid_response[:17],
-                                        [self.res1.resid_response[l]])),
+                                        [self.res1.resid_response[idx1]])),
                         np.concatenate((self.res2.resid_response[:17],
-                                        [self.res2.resid_response[l2]])),
+                                        [self.res2.resid_response[idx2]])),
                         rtol=1e-5, atol=1e-5)
         assert_allclose(np.concatenate((self.res1.resid_pearson[:17],
-                                        [self.res1.resid_pearson[l]])),
+                                        [self.res1.resid_pearson[idx1]])),
                         np.concatenate((self.res2.resid_pearson[:17],
-                                        [self.res2.resid_pearson[l2]])),
+                                        [self.res2.resid_pearson[idx2]])),
                         rtol=1e-5, atol=1e-5)
         assert_allclose(np.concatenate((self.res1.resid_deviance[:17],
-                                        [self.res1.resid_deviance[l]])),
+                                        [self.res1.resid_deviance[idx1]])),
                         np.concatenate((self.res2.resid_deviance[:17],
-                                        [self.res2.resid_deviance[l2]])),
+                                        [self.res2.resid_deviance[idx2]])),
                         rtol=1e-5, atol=1e-5)
 
         assert_allclose(np.concatenate((self.res1.resid_working[:17],
-                                        [self.res1.resid_working[l]])),
+                                        [self.res1.resid_working[idx1]])),
                         np.concatenate((self.res2.resid_working[:17],
-                                        [self.res2.resid_working[l2]])),
+                                        [self.res2.resid_working[idx2]])),
                         rtol=1e-5, atol=1e-5)
 
 
@@ -1710,12 +1782,12 @@ class CheckTweedie(object):
         assert_equal(self.res1.df_resid, self.res2.df_resid)
 
     def test_fittedvalues(self):
-        l = len(self.res1.fittedvalues) - 1
-        l2 = len(self.res2.resid_response) - 1
+        idx1 = len(self.res1.fittedvalues) - 1
+        idx2 = len(self.res2.resid_response) - 1
         assert_allclose(np.concatenate((self.res1.fittedvalues[:17],
-                                        [self.res1.fittedvalues[l]])),
+                                        [self.res1.fittedvalues[idx1]])),
                         np.concatenate((self.res2.fittedvalues[:17],
-                                        [self.res2.fittedvalues[l2]])),
+                                        [self.res2.fittedvalues[idx2]])),
                         atol=1e-4, rtol=1e-4)
 
     def test_summary(self):
@@ -1727,15 +1799,14 @@ class TestTweediePower15(CheckTweedie):
     @classmethod
     def setup_class(cls):
         from .results.results_glm import CpunishTweediePower15
-        from statsmodels.datasets.cpunish import load_pandas
-        cls.data = load_pandas()
+        cls.data = cpunish.load_pandas()
         cls.exog = cls.data.exog[['INCOME', 'SOUTH']]
         cls.endog = cls.data.endog
         family_link = sm.families.Tweedie(link=sm.families.links.Power(1),
                                           var_power=1.5)
         cls.res1 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family_link).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family_link).fit()
         cls.res2 = CpunishTweediePower15()
 
 
@@ -1743,15 +1814,14 @@ class TestTweediePower2(CheckTweedie):
     @classmethod
     def setup_class(cls):
         from .results.results_glm import CpunishTweediePower2
-        from statsmodels.datasets.cpunish import load_pandas
-        cls.data = load_pandas()
+        cls.data = cpunish.load_pandas()
         cls.exog = cls.data.exog[['INCOME', 'SOUTH']]
         cls.endog = cls.data.endog
         family_link = sm.families.Tweedie(link=sm.families.links.Power(1),
                                           var_power=2.)
         cls.res1 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family_link).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family_link).fit()
         cls.res2 = CpunishTweediePower2()
 
 
@@ -1759,15 +1829,14 @@ class TestTweedieLog1(CheckTweedie):
     @classmethod
     def setup_class(cls):
         from .results.results_glm import CpunishTweedieLog1
-        from statsmodels.datasets.cpunish import load_pandas
-        cls.data = load_pandas()
+        cls.data = cpunish.load_pandas()
         cls.exog = cls.data.exog[['INCOME', 'SOUTH']]
         cls.endog = cls.data.endog
         family_link = sm.families.Tweedie(link=sm.families.links.log(),
                                           var_power=1.)
         cls.res1 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family_link).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family_link).fit()
         cls.res2 = CpunishTweedieLog1()
 
 
@@ -1780,9 +1849,9 @@ class TestTweedieLog15Fair(CheckTweedie):
         family_link = sm.families.Tweedie(link=sm.families.links.log(),
                                           var_power=1.5)
         cls.res1 = sm.GLM(endog=data.endog,
-                           exog=data.exog[['rate_marriage', 'age',
-                                           'yrs_married']],
-                           family=family_link).fit()
+                          exog=data.exog[['rate_marriage', 'age',
+                                          'yrs_married']],
+                          family=family_link).fit()
         cls.res2 = FairTweedieLog15()
 
 
@@ -1807,79 +1876,183 @@ class CheckTweedieSpecial(object):
 class TestTweedieSpecialLog0(CheckTweedieSpecial):
     @classmethod
     def setup_class(cls):
-        from statsmodels.datasets.cpunish import load_pandas
-        cls.data = load_pandas()
+        cls.data = cpunish.load_pandas()
         cls.exog = cls.data.exog[['INCOME', 'SOUTH']]
         cls.endog = cls.data.endog
         family1 = sm.families.Gaussian(link=sm.families.links.log())
         cls.res1 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family1).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family1).fit()
         family2 = sm.families.Tweedie(link=sm.families.links.log(),
                                       var_power=0)
         cls.res2 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family2).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family2).fit()
 
 
 class TestTweedieSpecialLog1(CheckTweedieSpecial):
     @classmethod
     def setup_class(cls):
-        from statsmodels.datasets.cpunish import load_pandas
-        cls.data = load_pandas()
+        cls.data = cpunish.load_pandas()
         cls.exog = cls.data.exog[['INCOME', 'SOUTH']]
         cls.endog = cls.data.endog
         family1 = sm.families.Poisson(link=sm.families.links.log())
         cls.res1 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family1).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family1).fit()
         family2 = sm.families.Tweedie(link=sm.families.links.log(),
                                       var_power=1)
         cls.res2 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family2).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family2).fit()
 
 
 class TestTweedieSpecialLog2(CheckTweedieSpecial):
     @classmethod
     def setup_class(cls):
-        from statsmodels.datasets.cpunish import load_pandas
-        cls.data = load_pandas()
+        cls.data = cpunish.load_pandas()
         cls.exog = cls.data.exog[['INCOME', 'SOUTH']]
         cls.endog = cls.data.endog
         family1 = sm.families.Gamma(link=sm.families.links.log())
         cls.res1 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family1).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family1).fit()
         family2 = sm.families.Tweedie(link=sm.families.links.log(),
                                       var_power=2)
         cls.res2 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family2).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family2).fit()
 
 
 class TestTweedieSpecialLog3(CheckTweedieSpecial):
     @classmethod
     def setup_class(cls):
-        from statsmodels.datasets.cpunish import load_pandas
-        cls.data = load_pandas()
+        cls.data = cpunish.load_pandas()
         cls.exog = cls.data.exog[['INCOME', 'SOUTH']]
         cls.endog = cls.data.endog
         family1 = sm.families.InverseGaussian(link=sm.families.links.log())
         cls.res1 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family1).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family1).fit()
         family2 = sm.families.Tweedie(link=sm.families.links.log(),
                                       var_power=3)
         cls.res2 = sm.GLM(endog=cls.data.endog,
-                           exog=cls.data.exog[['INCOME', 'SOUTH']],
-                           family=family2).fit()
+                          exog=cls.data.exog[['INCOME', 'SOUTH']],
+                          family=family2).fit()
+
+@pytest.mark.filterwarnings("ignore:GLM ridge optimization")
+def test_tweedie_EQL():
+    # All tests below are regression tests, but the results
+    # are very close to the population values.
+
+    np.random.seed(3242)
+    n = 500
+    p = 1.5 # Tweedie variance power
+    x = np.random.normal(size=(n, 4))
+    lpr = np.dot(x, np.r_[1, -1, 0, 0.5])
+    mu = np.exp(lpr)
+    lam = 10 * mu**(2 - p) / (2 - p)
+    alp = (2 - p) / (p - 1)
+    bet = 10 * mu**(1 - p) / (p - 1)
+
+    # Generate Tweedie values using commpound Poisson distribution
+    y = np.empty(n)
+    N = np.random.poisson(lam)
+    for i in range(n):
+        y[i] = np.random.gamma(alp, 1 / bet[i], N[i]).sum()
+
+    # Un-regularized fit using gradients not IRLS
+    fam = sm.families.Tweedie(var_power=p, eql=True)
+    model1 = sm.GLM(y, x, family=fam)
+    result1 = model1.fit(method="newton")
+    assert_allclose(result1.params,
+       np.array([1.00350497, -0.99656954, 0.00802702, 0.50713209]),
+       rtol=1e-5, atol=1e-5)
+
+    # Lasso fit using coordinate-wise descent
+    model2 = sm.GLM(y, x, family=fam)
+    result2 = model2.fit_regularized(L1_wt=1, alpha=0.07)
+    import sys
+    ver = sys.version_info[0]
+    if ver >= 3:
+        rtol, atol = 1e-5, 1e-5
+    else:
+        rtol, atol = 1e-2, 1e-2
+    assert_allclose(result2.params,
+        np.array([1.00281192, -0.99182638, 0., 0.50448516]),
+        rtol=rtol, atol=atol)
+
+    # Series of ridge fits using gradients
+    ev = (np.array([1.001778, -0.99388, 0.00797, 0.506183]),
+          np.array([0.985841, -0.969124, 0.007319, 0.497649]),
+          np.array([0.206429, -0.164547, 0.000235, 0.102489]))
+    for j, alpha in enumerate([0.05, 0.5, 0.7]):
+        model3 = sm.GLM(y, x, family=fam)
+        result3 = model3.fit_regularized(L1_wt=0, alpha=alpha)
+        assert_allclose(result3.params, ev[j], rtol=rtol, atol=atol)
+        result4 = model3.fit_regularized(L1_wt=0, alpha=alpha * np.ones(x.shape[1]))
+        assert_allclose(result4.params, result3.params, rtol=rtol, atol=atol)
+        alpha = alpha * np.ones(x.shape[1])
+        alpha[0] = 0
+        result5 = model3.fit_regularized(L1_wt=0, alpha=alpha)
+        assert not np.allclose(result5.params, result4.params, rtol=rtol, atol=atol)
+
+
+def test_tweedie_EQL_poisson_limit():
+    # Test the limiting Poisson case of the Nelder/Pregibon/Tweedie
+    # EQL.
+
+    np.random.seed(3242)
+    n = 500
+
+    x = np.random.normal(size=(n, 3))
+    x[:, 0] = 1
+    lpr = 4 + x[:, 1:].sum(1)
+    mn = np.exp(lpr)
+    y = np.random.poisson(mn)
+
+    for scale in 1.0, 'x2', 'dev':
+
+        # Un-regularized fit using gradients not IRLS
+        fam = sm.families.Tweedie(var_power=1, eql=True)
+        model1 = sm.GLM(y, x, family=fam)
+        result1 = model1.fit(method="newton", scale=scale)
+
+        # Poisson GLM
+        model2 = sm.GLM(y, x, family=sm.families.Poisson())
+        result2 = model2.fit(method="newton", scale=scale)
+
+        assert_allclose(result1.params, result2.params, atol=1e-6, rtol=1e-6)
+        assert_allclose(result1.bse, result2.bse, 1e-6, 1e-6)
+
+
+def test_tweedie_EQL_upper_limit():
+    # Test the limiting case of the Nelder/Pregibon/Tweedie
+    # EQL with var = mean^2.  These are tests against population
+    # values so accuracy is not high.
+
+    np.random.seed(3242)
+    n = 500
+
+    x = np.random.normal(size=(n, 3))
+    x[:, 0] = 1
+    lpr = 4 + x[:, 1:].sum(1)
+    mn = np.exp(lpr)
+    y = np.random.poisson(mn)
+
+    for scale in 'x2', 'dev', 1.0:
+
+        # Un-regularized fit using gradients not IRLS
+        fam = sm.families.Tweedie(var_power=2, eql=True)
+        model1 = sm.GLM(y, x, family=fam)
+        result1 = model1.fit(method="newton", scale=scale)
+        assert_allclose(result1.params, np.r_[4, 1, 1], atol=1e-3, rtol=1e-1)
 
 
 def testTweediePowerEstimate():
     # Test the Pearson estimate of the Tweedie variance and scale parameters.
     #
-    # Ideally, this would match the following R code, but I can't make it work...
+    # Ideally, this would match the following R code, but I cannot make it work...
     #
     # setwd('c:/workspace')
     # data <- read.csv('cpunish.csv', sep=",")
@@ -1899,7 +2072,7 @@ def testTweediePowerEstimate():
     #                         p.vec=c(1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8,
     #                                 1.9), link.power=0,
     #                         data=data,do.plot = TRUE)
-    data = sm.datasets.cpunish.load_pandas()
+    data = cpunish.load_pandas()
     y = [1.00113835e+05,   6.89668315e+03,   6.15726842e+03,
          1.41718806e+03,   5.11776456e+02,   2.55369154e+02,
          1.07147443e+01,   3.56874698e+00,   4.06797842e-02,
@@ -1919,12 +2092,41 @@ def testTweediePowerEstimate():
     p = model1.estimate_tweedie_power(res1.mu)
     assert_allclose(p, res2.params[1], rtol=0.25)
 
+def test_glm_lasso_6431():
+
+    # Based on issue #6431
+    # Fails with newton-cg as optimizer
+    np.random.seed(123)
+
+    from statsmodels.regression.linear_model import OLS
+
+    n = 50
+    x = np.ones((n, 2))
+    x[:, 1] = np.arange(0, n)
+    y = 1000 + x[:, 1] + np.random.normal(0, 1, n)
+
+    params = np.r_[999.82244338, 1.0077889]
+
+    for method in "bfgs", None:
+        for fun in [OLS, GLM]:
+
+            # Changing L1_wtValue from 0 to 1e-9 changes
+            # the algorithm from scipy gradient optimization
+            # to statsmodels coordinate descent
+            for L1_wtValue in [0, 1e-9]:
+                model = fun(y, x)
+                if fun == OLS:
+                    fit = model.fit_regularized(alpha=0, L1_wt=L1_wtValue)
+                else:
+                    fit = model._fit_ridge(alpha=0, start_params=None, method=method)
+                assert_allclose(params, fit.params, atol=1e-6, rtol=1e-6)
+
 class TestRegularized(object):
 
     def test_regularized(self):
 
         import os
-        from . import glmnet_r_results
+        from .results import glmnet_r_results
 
         for dtype in "binomial", "poisson":
 
@@ -2107,9 +2309,7 @@ def test_poisson_deviance():
 
 def test_non_invertible_hessian_fails_summary():
     # Test when the hessian fails the summary is still available.
-    import statsmodels.api as sm
-
-    data = sm.datasets.cpunish.load_pandas()
+    data = cpunish.load_pandas()
 
     data.endog[:] = 1
     with warnings.catch_warnings():

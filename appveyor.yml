@@ -6,21 +6,17 @@ os: Visual Studio 2015
 environment:
   # Undefining will run test from installation
   PYTEST_DIRECTIVES: --skip-slow
+  PYTHONHASHSEED: 0 # Ensure tests are correctly gathered by xdist
+  MKL_NUM_THREADS: 1
+  NUMEXPR_NUM_THREADS: 1
+  OMP_NUM_THREADS: 1
+  OPENBLAS_NUM_THREADS: 1
   matrix:
     # Pip builds
-    - PYTHON: C:\Python27
+    - PYTHON: C:\Python38
       PYTEST_DIRECTIVES:
-    - PYTHON: C:\Python27-x64
-    - PYTHON: C:\Python36
-    - PYTHON: C:\Python36-x64
-      PYTEST_DIRECTIVES:
-    # Conda builds
-    - PY_MAJOR_VER: 2
+    - PY_MAJOR_VER: 3
       PYTHON_ARCH: "x86"
-    - PY_MAJOR_VER: 2
-      PYTHON_ARCH: "x86_64"
-      SCIPY: "0.18"
-      NUMPY: "1.11"
     - PY_MAJOR_VER: 3
       PYTHON_ARCH: "x86_64"
       TEST_INSTALL: "true"
@@ -36,13 +32,11 @@ build_script:
   - ps: If ($skip_appveyor) { echo "[skip appveyor]"; Exit-AppVeyorBuild }
   # Show information about CPU running job to understand BLAS issues
   - wmic cpu get caption, name, numberofcores
-  - SET MKL_NUM_THREADS=1
-  - SET NUMEXPR_NUM_THREADS=1
-  - SET OMP_NUM_THREADS=1
-  - SET OPENBLAS_NUM_THREADS=1
   - If Defined PY_MAJOR_VER ( call tools\ci\appveyor_conda.bat ) else ( call tools\ci\appveyor_pip.bat )
-  - pip install pytest pytest-xdist pytest-randomly
-  - if Defined PYTEST_DIRECTIVES ( python setup.py develop ) else ( python setup.py install )
+  # Pin to 1.29 for now due to test discovery issues
+  - python -m pip install --upgrade pip
+  - pip install pytest "pytest-xdist==1.29" pytest-randomly
+  - if Defined PYTEST_DIRECTIVES ( pip install -e . --no-build-isolation ) else ( pip install . )
 
 test_script:
   - call tools\ci\run_test.bat

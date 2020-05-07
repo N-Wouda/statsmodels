@@ -2,17 +2,22 @@
 To build with coverage of Cython files
 export SM_CYTHON_COVERAGE=1
 python setup.py develop
-pytest --cov-config=tools/coveragerc/.coveragerc_cython --cov=statsmodels \
-       statsmodels
+pytest --cov=statsmodels statsmodels
+coverage html
 """
+from collections import defaultdict
+from distutils.command.clean import clean
 import fnmatch
 import os
-import sys
+from os.path import abspath, join as pjoin, relpath, split
 import shutil
-from collections import defaultdict
-from os.path import relpath, abspath, split, join as pjoin
+import sys
 
 import pkg_resources
+from setuptools import Extension, find_packages, setup
+from setuptools.dist import Distribution
+
+import versioneer
 
 try:
     # SM_FORCE_C is a testing shim to force setup to use C source files
@@ -28,17 +33,13 @@ except ImportError:
     from setuptools.command.build_ext import build_ext
 
     HAS_CYTHON = False
-from setuptools import Extension, find_packages, setup
-from distutils.command.clean import clean
-from setuptools.dist import Distribution
 
-import versioneer
 
 ###############################################################################
 # Key Values that Change Each Release
 ###############################################################################
-SETUP_REQUIREMENTS = {'numpy': '1.11',  # released March 2016
-                      'scipy': '0.18',  # released July 2016
+SETUP_REQUIREMENTS = {'numpy': '1.15',  # released June 2018
+                      'scipy': '1.1',  # released May 2018
                       }
 
 REQ_NOT_MET_MSG = """
@@ -60,11 +61,11 @@ for key in SETUP_REQUIREMENTS:
         raise RuntimeError(REQ_NOT_MET_MSG.format(key, ver, req_ver))
 
 INSTALL_REQUIREMENTS = SETUP_REQUIREMENTS.copy()
-INSTALL_REQUIREMENTS.update({'pandas': '0.19',  # released October 2016
-                             'patsy': '0.4.0',  # released July 2015
+INSTALL_REQUIREMENTS.update({'pandas': '0.21',  # released October 2017
+                             'patsy': '0.5',  # released January 2018
                              })
 
-CYTHON_MIN_VER = '0.24'  # released Apr 2016
+CYTHON_MIN_VER = '0.29'  # released November 2018
 
 SETUP_REQUIRES = [k + '>=' + v for k, v in SETUP_REQUIREMENTS.items()]
 INSTALL_REQUIRES = [k + '>=' + v for k, v in INSTALL_REQUIREMENTS.items()]
@@ -84,20 +85,23 @@ SETUP_DIR = split(abspath(__file__))[0]
 with open(pjoin(SETUP_DIR, 'README.rst')) as readme:
     README = readme.read()
 LONG_DESCRIPTION = README
-MAINTAINER = 'Josef Perktold, Chad Fulton, Kerby Shedden'
+MAINTAINER = 'statsmodels Developers'
 MAINTAINER_EMAIL = 'pystatsmodels@googlegroups.com'
 URL = 'https://www.statsmodels.org/'
 LICENSE = 'BSD License'
 DOWNLOAD_URL = ''
+PROJECT_URLS = {
+    'Bug Tracker': 'https://github.com/statsmodels/statsmodels/issues',
+    'Documentation': 'https://www.statsmodels.org/stable/index.html',
+    'Source Code': 'https://github.com/statsmodels/statsmodels'
+}
 
 CLASSIFIERS = ['Development Status :: 4 - Beta',
                'Environment :: Console',
                'Programming Language :: Cython',
-               'Programming Language :: Python :: 2.7',
-               'Programming Language :: Python :: 3.4',
-               'Programming Language :: Python :: 3.5',
                'Programming Language :: Python :: 3.6',
                'Programming Language :: Python :: 3.7',
+               'Programming Language :: Python :: 3.8',
                'Operating System :: OS Independent',
                'Intended Audience :: End Users/Desktop',
                'Intended Audience :: Developers',
@@ -125,7 +129,8 @@ ADDITIONAL_PACKAGE_DATA = {
     'statsmodels.stats.tests': ['*.txt'],
     'statsmodels.stats.libqsturng': ['*.r', '*.txt', '*.dat'],
     'statsmodels.stats.libqsturng.tests': ['*.csv', '*.dat'],
-    'statsmodels.sandbox.regression.tests': ['*.dta', '*.csv']
+    'statsmodels.sandbox.regression.tests': ['*.dta', '*.csv'],
+    'statsmodels.tsa.statespace.tests.results': ['*.pkl']
 }
 
 ##############################################################################
@@ -141,9 +146,12 @@ DEFINE_MACROS = [('CYTHON_TRACE_NOGIL', CYTHON_TRACE_NOGIL)]
 
 
 exts = dict(
+    _stl={'source': 'statsmodels/tsa/_stl.pyx'},
     _exponential_smoothers={'source': 'statsmodels/tsa/_exponential_smoothers.pyx'},  # noqa: E501
+    _innovations={'source': 'statsmodels/tsa/_innovations.pyx'},
     _hamilton_filter={'source': 'statsmodels/tsa/regime_switching/_hamilton_filter.pyx.in'},  # noqa: E501
     _kim_smoother={'source': 'statsmodels/tsa/regime_switching/_kim_smoother.pyx.in'},  # noqa: E501
+    _arma_innovations={'source': 'statsmodels/tsa/innovations/_arma_innovations.pyx.in'},  # noqa: E501
     linbin={'source': 'statsmodels/nonparametric/linbin.pyx'},
     _smoothers_lowess={'source': 'statsmodels/nonparametric/_smoothers_lowess.pyx'},  # noqa: E501
     kalman_loglike={'source': 'statsmodels/tsa/kalmanf/kalman_loglike.pyx',
@@ -165,6 +173,7 @@ statespace_exts = [
     'statsmodels/tsa/statespace/_smoothers/_univariate.pyx.in',
     'statsmodels/tsa/statespace/_smoothers/_univariate_diffuse.pyx.in',
     'statsmodels/tsa/statespace/_simulation_smoother.pyx.in',
+    'statsmodels/tsa/statespace/_cfa_simulation_smoother.pyx.in',
     'statsmodels/tsa/statespace/_tools.pyx.in',
 ]
 
@@ -285,7 +294,8 @@ for source in statespace_exts:
     extensions.append(ext)
 
 if HAS_CYTHON:
-    extensions = cythonize(extensions, compiler_directives=COMPILER_DIRECTIVES)
+    extensions = cythonize(extensions, compiler_directives=COMPILER_DIRECTIVES,
+                           language_level=3, force=CYTHON_COVERAGE)
 
 ##############################################################################
 # Construct package data
@@ -324,6 +334,7 @@ setup(name=DISTNAME,
       license=LICENSE,
       url=URL,
       download_url=DOWNLOAD_URL,
+      project_urls=PROJECT_URLS,
       long_description=LONG_DESCRIPTION,
       classifiers=CLASSIFIERS,
       platforms='any',
@@ -336,7 +347,7 @@ setup(name=DISTNAME,
       install_requires=INSTALL_REQUIRES,
       extras_require=EXTRAS_REQUIRE,
       zip_safe=False,
-      data_files=[('', ['LICENSE.txt', 'setup.cfg'])]
+      python_requires=">=3.6",
       )
 
 # Clean-up copied files

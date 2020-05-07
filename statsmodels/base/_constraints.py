@@ -10,6 +10,90 @@ License: BSD-3
 import numpy as np
 
 
+class LinearConstraints(object):
+    """Class to hold linear constraints information
+
+    Affine constraints are defined as ``R b = q` where `R` is the constraints
+    matrix and `q` are the constraints values and `b` are the parameters.
+
+    This is in analogy to patsy's LinearConstraints class but can be pickled.
+
+    Parameters
+    ----------
+    constraint_matrix : ndarray
+        R matrix, 2-dim with number of columns equal to the number of
+        parameters. Each row defines one constraint.
+    constraint_values : ndarray
+        1-dim array of constant values
+    variable_names : list of strings
+        parameter names, used only for display
+    kwds : keyword arguments
+        keywords are attached to the instance.
+
+    """
+
+    def __init__(self, constraint_matrix, constraint_values,
+                 variable_names, **kwds):
+
+        self.constraint_matrix = constraint_matrix
+        self.constraint_values = constraint_values
+        self.variable_names = variable_names
+
+        # alias for patsy compatibility
+        self.coefs = constraint_matrix
+        self.constants = constraint_values
+
+        self.__dict__.update(kwds)
+        self.tuple = (self.constraint_matrix, self.constraint_values)
+
+    def __iter__(self):
+        yield from self.tuple
+
+    def __getitem__(self, idx):
+        return self.tuple[idx]
+
+    def __str__(self):
+        def prod_string(v, name):
+            v = np.abs(v)
+            if v != 1:
+                ss = str(v) + " * " + name
+            else:
+                ss = name
+            return ss
+
+        constraints_strings = []
+        for r, q in zip(*self):
+            ss = []
+            for v, name in zip(r, self.variable_names):
+                if v != 0 and ss == []:
+                    ss += prod_string(v, name)
+                elif v > 0:
+                    ss += " + " + prod_string(v, name)
+                elif v < 0:
+                    ss += " - " + prod_string(np.abs(v), name)
+            ss += " = " + str(q.item())
+            constraints_strings.append(''.join(ss))
+
+        return '\n'.join(constraints_strings)
+
+    @classmethod
+    def from_patsy(cls, lc):
+        """class method to create instance from patsy instance
+
+        Parameters
+        ----------
+        lc : instance
+            instance of patsy LinearConstraint, or other instances that have
+            attributes ``lc.coefs, lc.constants, lc.variable_names``
+
+        Returns
+        -------
+        instance of this class
+
+        """
+        return cls(lc.coefs, lc.constants, lc.variable_names)
+
+
 class TransformRestriction(object):
     """Transformation for linear constraints `R params = q`
 
@@ -39,13 +123,12 @@ class TransformRestriction(object):
         b1 + b2 = 0 and b1 + 2*b2 = 0, implies that b2 = 0.
 
     The transformation applied from full to reduced parameter space does not
-    raise and exception if the constraint doesn't hold.
+    raise and exception if the constraint does not hold.
     TODO: maybe change this, what's the behavior in this case?
 
 
     The `reduce` transform is applied to the array of explanatory variables,
     `exog`, when transforming a linear model to impose the constraints.
-
     """
 
     def __init__(self, R, q=None):
@@ -102,7 +185,6 @@ class TransformRestriction(object):
         -----
         If the restriction is not homogeneous, i.e. q is not equal to zero,
         then this is an affine transform.
-
         """
         params_reduced = np.asarray(params_reduced)
         return self.transf_mat.dot(params_reduced.T).T + self.constant
@@ -122,21 +204,20 @@ class TransformRestriction(object):
 
         This transform can be applied to the original parameters as well
         as to the data. If params is 2-d, then each row is transformed.
-
         """
         params = np.asarray(params)
         return params.dot(self.transf_mat)
 
 
 def transform_params_constraint(params, Sinv, R, q):
-    """find the parameters that statisfy linear constraint from unconstraint
+    """find the parameters that statisfy linear constraint from unconstrained
 
     The linear constraint R params = q is imposed.
 
     Parameters
     ----------
     params : array_like
-        unconstraint parameters
+        unconstrained parameters
     Sinv : ndarray, 2d, symmetric
         covariance matrix of the parameter estimate
     R : ndarray, 2d
@@ -159,7 +240,6 @@ def transform_params_constraint(params, Sinv, R, q):
 
     My guess is that this is the point in the subspace that satisfies
     the constraint that has minimum Mahalanobis distance. Proof ?
-
     """
 
     rsr = R.dot(Sinv).dot(R.T)
@@ -225,8 +305,6 @@ def fit_constrained(model, constraint_matrix, constraint_values,
     columns of exog are not yet supported.
 
     Requires a model that implement an offset option.
-
-
     """
     self = model   # internal alias, used for methods
     if fit_kwds is None:
@@ -246,7 +324,7 @@ def fit_constrained(model, constraint_matrix, constraint_values,
     if start_params is not None:
         start_params =  transf.reduce(start_params)
 
-    #need copy, because we don't want to change it, we don't need deepcopy
+    #need copy, because we do not want to change it, we do not need deepcopy
     import copy
     init_kwds = copy.copy(self._get_init_kwds())
 
@@ -275,7 +353,6 @@ def fit_constrained_wrap(model, constraints, start_params=None, **fit_kwds):
 
     This is the prototype for the fit_constrained method that has been added
     to Poisson and GLM.
-
     """
 
     self = model  # alias for use as method
@@ -299,19 +376,19 @@ def fit_constrained_wrap(model, constraints, start_params=None, **fit_kwds):
                                               fit_kwds=fit_kwds)
     #create dummy results Instance, TODO: wire up properly
     res = self.fit(start_params=params, maxiter=0,
-                   warn_convergence=False) # we get a wrapper back
+                   warn_convergence=False)  # we get a wrapper back
     res._results.params = params
     res._results.cov_params_default = cov
     cov_type = fit_kwds.get('cov_type', 'nonrobust')
     if cov_type == 'nonrobust':
-            res._results.normalized_cov_params = cov / res_constr.scale
+        res._results.normalized_cov_params = cov / res_constr.scale
     else:
-            res._results.normalized_cov_params = None
+        res._results.normalized_cov_params = None
 
     k_constr = len(q)
     res._results.df_resid += k_constr
     res._results.df_model -= k_constr
-    res._results.constraints = lc
+    res._results.constraints = LinearConstraints.from_patsy(lc)
     res._results.k_constr = k_constr
     res._results.results_constrained = res_constr
     return res

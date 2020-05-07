@@ -3,18 +3,12 @@
 Impulse reponse-related code
 """
 
-from __future__ import division
-
 import numpy as np
 import numpy.linalg as la
 import scipy.linalg as L
 
-from scipy import stats
 
 from statsmodels.tools.decorators import cache_readonly
-from statsmodels.tools.tools import chain_dot
-#from statsmodels.tsa.api import VAR
-from statsmodels.compat.python import range
 import statsmodels.tsa.tsatools as tsa
 import statsmodels.tsa.vector_ar.plotting as plotting
 import statsmodels.tsa.vector_ar.util as util
@@ -104,9 +98,9 @@ class BaseIRAnalysis(object):
         ----------
         orth : bool, default False
             Compute orthogonalized impulse responses
-        impulse : string or int
+        impulse : {str, int}
             variable providing the impulse
-        response : string or int
+        response : {str, int}
             variable affected by the impulse
         signif : float (0 < signif < 1)
             Significance level for error bars, defaults to 95% CI
@@ -117,7 +111,7 @@ class BaseIRAnalysis(object):
 
         plot_stderr: bool, default True
             Plot standard impulse response error bands
-        stderr_type: string
+        stderr_type: str
             'asym': default, computes asymptotic standard errors
             'mc': monte carlo standard errors (use rpl)
         repl: int, default 1000
@@ -141,7 +135,7 @@ class BaseIRAnalysis(object):
         else:
             title = 'Impulse responses'
 
-        if plot_stderr == False:
+        if plot_stderr is False:
             stderr = None
 
         elif stderr_type not in ['asym', 'mc', 'sz1', 'sz2','sz3']:
@@ -187,9 +181,9 @@ class BaseIRAnalysis(object):
         ----------
         orth : bool, default False
             Compute orthogonalized impulse responses
-        impulse : string or int
+        impulse : {str, int}
             variable providing the impulse
-        response : string or int
+        response : {str, int}
             variable affected by the impulse
         signif : float (0 < signif < 1)
             Significance level for error bars, defaults to 95% CI
@@ -200,14 +194,13 @@ class BaseIRAnalysis(object):
 
         plot_stderr: bool, default True
             Plot standard impulse response error bands
-        stderr_type: string
+        stderr_type: str
             'asym': default, computes asymptotic standard errors
             'mc': monte carlo standard errors (use rpl)
         repl: int, default 1000
             Number of replications for monte carlo standard errors
         seed: int
             np.random.seed for Monte Carlo replications
-
         """
 
         if orth:
@@ -226,7 +219,7 @@ class BaseIRAnalysis(object):
                 stderr = self.cum_effect_cov(orth=orth)
             if stderr_type == 'mc':
                 stderr = self.cum_errband_mc(orth=orth, repl=repl,
-                                                signif=signif, seed=seed)
+                                             signif=signif, seed=seed)
         if not plot_stderr:
             stderr = None
 
@@ -284,7 +277,7 @@ class IRAnalysis(BaseIRAnalysis):
         covs[0] = np.zeros((self.neqs ** 2, self.neqs ** 2))
         for i in range(1, self.periods + 1):
             Gi = self.G[i - 1]
-            covs[i] = chain_dot(Gi, self.cov_a, Gi.T)
+            covs[i] = Gi @ self.cov_a @ Gi.T
 
         return covs
 
@@ -295,12 +288,12 @@ class IRAnalysis(BaseIRAnalysis):
         """
         model = self.model
         periods = self.periods
-        if svar == True:
-            return model.sirf_errband_mc(orth=orth, repl=repl, T=periods,
-                                        signif=signif, seed=seed,
-                                        burn=burn, cum=False)
+        if svar:
+            return model.sirf_errband_mc(orth=orth, repl=repl, steps=periods,
+                                         signif=signif, seed=seed,
+                                         burn=burn, cum=False)
         else:
-            return model.irf_errband_mc(orth=orth, repl=repl, T=periods,
+            return model.irf_errband_mc(orth=orth, repl=repl, steps=periods,
                                         signif=signif, seed=seed,
                                         burn=burn, cum=False)
 
@@ -337,13 +330,13 @@ class IRAnalysis(BaseIRAnalysis):
         periods = self.periods
         irfs = self._choose_irfs(orth, svar)
         neqs = self.neqs
-        irf_resim = model.irf_resim(orth=orth, repl=repl, T=periods, seed=seed,
-                                   burn=100)
+        irf_resim = model.irf_resim(orth=orth, repl=repl, steps=periods,
+                                    seed=seed, burn=burn)
         q = util.norm_signif_level(signif)
 
         W, eigva, k =self._eigval_decomp_SZ(irf_resim)
 
-        if component != None:
+        if component is not None:
             if np.shape(component) != (neqs,neqs):
                 raise ValueError("Component array must be " + str(neqs) + " x " + str(neqs))
             if np.argmax(component) >= neqs*periods:
@@ -395,11 +388,11 @@ class IRAnalysis(BaseIRAnalysis):
         irfs = self._choose_irfs(orth, svar)
         neqs = self.neqs
         irf_resim = model.irf_resim(orth=orth, repl=repl, T=periods, seed=seed,
-                                   burn=100)
+                                    burn=100)
 
         W, eigva, k = self._eigval_decomp_SZ(irf_resim)
 
-        if component != None:
+        if component is not None:
             if np.shape(component) != (neqs,neqs):
                 raise ValueError("Component array must be " + str(neqs) + " x " + str(neqs))
             if np.argmax(component) >= neqs*periods:
@@ -458,7 +451,7 @@ class IRAnalysis(BaseIRAnalysis):
         irfs = self._choose_irfs(orth, svar)
         neqs = self.neqs
         irf_resim = model.irf_resim(orth=orth, repl=repl, T=periods, seed=seed,
-                                   burn=100)
+                                    burn=100)
         stack = np.zeros((neqs, repl, periods*neqs))
 
         #stack left to right, up and down
@@ -472,7 +465,7 @@ class IRAnalysis(BaseIRAnalysis):
         eigva = np.zeros((neqs, periods*neqs))
         k = np.zeros((neqs))
 
-        if component != None:
+        if component is not None:
             if np.size(component) != (neqs):
                 raise ValueError("Component array must be of length " + str(neqs))
             if np.argmax(component) >= neqs*periods:
@@ -487,12 +480,12 @@ class IRAnalysis(BaseIRAnalysis):
 
         gamma = np.zeros((repl, periods+1, neqs, neqs))
         for p in range(repl):
-            c=0
+            c = 0
             for j in range(neqs):
                 for i in range(neqs):
-                        gamma[p,1:,i,j] = W[j,k[j],i*periods:(i+1)*periods] * irf_resim[p,1:,i,j]
-                        if i == neqs-1:
-                            gamma[p,1:,i,j] = W[j,k[j],i*periods:] * irf_resim[p,1:,i,j]
+                    gamma[p,1:,i,j] = W[j,k[j],i*periods:(i+1)*periods] * irf_resim[p,1:,i,j]
+                    if i == neqs-1:
+                        gamma[p,1:,i,j] = W[j,k[j],i*periods:] * irf_resim[p,1:,i,j]
 
         gamma_sort = np.sort(gamma, axis=0) #sort to get quantiles
         indx = round(signif/2*repl)-1,round((1-signif/2)*repl)-1
@@ -513,7 +506,6 @@ class IRAnalysis(BaseIRAnalysis):
         W: array of eigenvectors
         eigva: list of eigenvalues
         k: matrix indicating column # of largest eigenvalue for each c_i,j
-
         """
         neqs = self.neqs
         periods = self.periods
@@ -576,10 +568,10 @@ class IRAnalysis(BaseIRAnalysis):
                 apiece = 0
             else:
                 Ci = np.dot(PIk, self.G[i-1])
-                apiece = chain_dot(Ci, self.cov_a, Ci.T)
+                apiece = Ci @ self.cov_a @ Ci.T
 
             Cibar = np.dot(np.kron(Ik, self.irfs[i]), H)
-            bpiece = chain_dot(Cibar, self.cov_sig, Cibar.T) / self.T
+            bpiece = (Cibar @ self.cov_sig @ Cibar.T) / self.T
 
             # Lutkepohl typo, cov_sig correct
             covs[i] = apiece + bpiece
@@ -593,7 +585,7 @@ class IRAnalysis(BaseIRAnalysis):
 
         Parameters
         ----------
-        orth : boolean
+        orth : bool
 
         Notes
         -----
@@ -601,7 +593,6 @@ class IRAnalysis(BaseIRAnalysis):
 
         Returns
         -------
-
         """
         Ik = np.eye(self.neqs)
         PIk = np.kron(self.P.T, Ik)
@@ -617,10 +608,10 @@ class IRAnalysis(BaseIRAnalysis):
                     apiece = 0
                 else:
                     Bn = np.dot(PIk, F)
-                    apiece = chain_dot(Bn, self.cov_a, Bn.T)
+                    apiece = Bn @ self.cov_a @ Bn.T
 
                 Bnbar = np.dot(np.kron(Ik, self.cum_effects[i]), self.H)
-                bpiece = chain_dot(Bnbar, self.cov_sig, Bnbar.T) / self.T
+                bpiece = (Bnbar @ self.cov_sig @ Bnbar.T) / self.T
 
                 covs[i] = apiece + bpiece
             else:
@@ -628,12 +619,12 @@ class IRAnalysis(BaseIRAnalysis):
                     covs[i] = np.zeros((self.neqs**2, self.neqs**2))
                     continue
 
-                covs[i] = chain_dot(F, self.cov_a, F.T)
+                covs[i] = F @ self.cov_a @ F.T
 
         return covs
 
     def cum_errband_mc(self, orth=False, repl=1000,
-                          signif=0.05, seed=None, burn=100):
+                       signif=0.05, seed=None, burn=100):
         """
         IRF Monte Carlo integrated error bands of cumulative effect
         """
@@ -646,7 +637,6 @@ class IRAnalysis(BaseIRAnalysis):
         """
         Returns
         -------
-
         """
         lre = self.lr_effects
         Finfty = np.kron(np.tile(lre.T, self.lags), lre)
@@ -656,10 +646,10 @@ class IRAnalysis(BaseIRAnalysis):
             Binf = np.dot(np.kron(self.P.T, np.eye(self.neqs)), Finfty)
             Binfbar = np.dot(np.kron(Ik, lre), self.H)
 
-            return (chain_dot(Binf, self.cov_a, Binf.T) +
-                    chain_dot(Binfbar, self.cov_sig, Binfbar.T))
+            return (Binf @ self.cov_a @ Binf.T +
+                    Binfbar @ self.cov_sig @ Binfbar.T)
         else:
-            return chain_dot(Finfty, self.cov_a, Finfty.T)
+            return Finfty @ self.cov_a @ Finfty.T
 
     def stderr(self, orth=False):
         return np.array([tsa.unvec(np.sqrt(np.diag(c)))
@@ -684,16 +674,13 @@ class IRAnalysis(BaseIRAnalysis):
         Kkk = tsa.commutation_matrix(k, k)
         Ik = np.eye(k)
 
-        # B = chain_dot(Lk, np.eye(k**2) + commutation_matrix(k, k),
-        #               np.kron(self.P, np.eye(k)), Lk.T)
+        # B = Lk @ (np.eye(k**2) + commutation_matrix(k, k)) @ \
+        #     np.kron(self.P, np.eye(k)) @ Lk.T
+        # return Lk.T @ L.inv(B)
 
-        # return np.dot(Lk.T, L.inv(B))
-
-        B = chain_dot(Lk,
-                      np.dot(np.kron(Ik, self.P), Kkk) + np.kron(self.P, Ik),
-                      Lk.T)
+        B = Lk @ (np.kron(Ik, self.P) @ Kkk + np.kron(self.P, Ik)) @ Lk.T
 
         return np.dot(Lk.T, L.inv(B))
 
     def fevd_table(self):
-        pass
+        raise NotImplementedError

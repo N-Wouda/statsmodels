@@ -27,8 +27,6 @@ Statistics. 14:3, 643-656.
 
 
 """
-from __future__ import division
-
 import numpy as np
 from statsmodels.regression.linear_model import OLS, WLS
 from statsmodels.tools import add_constant
@@ -54,7 +52,6 @@ class OptAFT(_OptFuncts):
     _EM_test:
         Uses the modified Em algorithm of Zhou 2005 to maximize the
         likelihood of a parameter vector.
-
     """
     def __init__(self):
         pass
@@ -77,7 +74,6 @@ class OptAFT(_OptFuncts):
         llr: float
             -2 times the log likelihood of the nuisance parameters and the
             hypothesized value of the parameter(s) of interest.
-
         """
         test_params = test_vals.reshape(self.model.nvar, 1)
         est_vect = self.model.uncens_exog * (self.model.uncens_endog -
@@ -97,9 +93,9 @@ class OptAFT(_OptFuncts):
         Uses EM algorithm to compute the maximum likelihood of a test
 
         Parameters
-        ---------
+        ----------
 
-        Nuisance Params: array
+        Nuisance Params: ndarray
             Vector of values to be used as nuisance params.
 
         maxiter: int
@@ -161,7 +157,7 @@ class OptAFT(_OptFuncts):
         parameter and some critical value.
 
         Parameters
-        ---------
+        ----------
         b0: float
             Value of a regression parameter
 
@@ -177,7 +173,7 @@ class emplikeAFT(object):
     Class for estimating and conducting inference in an AFT model.
 
     Parameters
-    ---------
+    ----------
 
     endog: nx1 array
         Response variables that are subject to random censoring
@@ -195,10 +191,10 @@ class emplikeAFT(object):
     nobs: float
         Number of observations
 
-    endog: array
+    endog: ndarray
         Endog attay
 
-    exog: array
+    exog: ndarray
         Exogenous variable matrix
 
     censors
@@ -210,10 +206,10 @@ class emplikeAFT(object):
     uncens_nobs: float
         Number of uncensored observations
 
-    uncens_endog: array
+    uncens_endog: ndarray
         Uncensored response variables
 
-    uncens_exog: array
+    uncens_exog: ndarray
         Exogenous variables of the uncensored observations
 
     Methods
@@ -258,14 +254,14 @@ class emplikeAFT(object):
 
         Parameters
         ----------
-        endog: array
+        endog: ndarray
             Models endogenous variable
-        censors: array
+        censors: ndarray
             arrat indicating a censored array
 
         Returns
         -------
-        indic_ties: array
+        indic_ties: ndarray
             ties[i]=1 if endog[i]==endog[i+1] and
             censors[i]=censors[i+1]
         """
@@ -288,7 +284,6 @@ class emplikeAFT(object):
             Indicates if the i'th observation is the same as the ith +1
         untied_km: 1d array
             Km estimates at each observation assuming no ties.
-
         """
         # TODO: Vectorize, even though it is only 1 pass through for any
         # function call
@@ -329,7 +324,6 @@ class emplikeAFT(object):
         This function makes calls to _is_tied and km_w_ties to handle ties in
         the data.If a censored observation and an uncensored observation has
         the same value, it is assumed that the uncensored happened first.
-
         """
         nobs = self.nobs
         num = (nobs - (np.arange(nobs) + 1.))
@@ -347,7 +341,7 @@ class emplikeAFT(object):
         Fits an AFT model and returns results instance
 
         Parameters
-        ---------
+        ----------
         None
 
 
@@ -377,7 +371,7 @@ class AFTResults(OptAFT):
         Fits an AFT model and returns parameters.
 
         Parameters
-        ---------
+        ----------
         None
 
 
@@ -424,11 +418,11 @@ class AFTResults(OptAFT):
         Returns
         -------
 
-        test_results: tuple
+        test_results : tuple
             The log-likelihood and p-pvalue of the test.
 
         Notes
-        ----
+        -----
 
         The function will warn if the EM reaches the maxiter.  However, when
         optimizing over nuisance parameters, it is possible to reach a
@@ -439,7 +433,7 @@ class AFTResults(OptAFT):
         infinity.
 
         Examples
-        -------
+        --------
 
         >>> import statsmodels.api as sm
         >>> import numpy as np
@@ -464,7 +458,6 @@ class AFTResults(OptAFT):
         >>> res = model.test_beta([0], [1])
         >>> res
         (4.623487775078047, 0.031537049752572731)
-
         """
         censors = self.model.censors
         endog = self.model.endog
@@ -513,7 +506,7 @@ class AFTResults(OptAFT):
         parameter in the AFT model.
 
         Parameters
-        ---------
+        ----------
 
         param_num: int
             Parameter number of interest
@@ -528,7 +521,7 @@ class AFTResults(OptAFT):
             Significance level.  Default is .05
 
         Notes
-        ----
+        -----
         If the function returns f(a) and f(b) must have different signs,
         consider widening the search area by adjusting beta_low and
         beta_high.
@@ -550,7 +543,6 @@ class AFTResults(OptAFT):
 
         If the user desires to verify the success of the optimization,
         it is recommended to test the limits using test_beta.
-
         """
         params = self.params()
         self.r0 = chi2.ppf(1 - sig, 1)

@@ -38,10 +38,9 @@ def load(as_pandas=None):
         or numpy recarrays and arrays.  If True, returns pandas.
 
     Returns
-    --------
+    -------
     Dataset instance:
         See DATASET_PROPOSAL.txt for more information.
-
     """
     return du.as_numpy_dataset(load_pandas(), as_pandas=as_pandas)
 

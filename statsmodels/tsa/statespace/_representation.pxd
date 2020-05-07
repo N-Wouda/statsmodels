@@ -26,8 +26,9 @@ cdef class sStatespace(object):
 
     # Flags
     cdef readonly int time_invariant
-    cdef readonly int initialized
+    cdef readonly int initialized, initialized_diffuse, initialized_stationary
     cdef public int diagonal_obs_cov
+    cdef readonly int _diagonal_obs_cov
     cdef public int subset_design
     cdef public int companion_transition
 
@@ -44,6 +45,7 @@ cdef class sStatespace(object):
     cdef readonly np.float32_t [::1,:] transform_cholesky
     cdef readonly np.float32_t [::1,:] transform_obs_cov
     cdef readonly np.float32_t [::1,:] transform_design
+    cdef readonly np.float32_t [:] transform_obs_intercept
     cdef readonly np.float32_t transform_determinant
 
     cdef readonly np.float32_t [:] collapse_obs
@@ -68,9 +70,10 @@ cdef class sStatespace(object):
     cdef np.float32_t * _initial_diffuse_state_cov
 
     # Current location
-    cdef int t
-    cdef int _k_endog, _k_states, _k_posdef, _k_endog2, _k_states2, _k_posdef2, _k_endogstates, _k_statesposdef
-    cdef int _nmissing
+    cdef readonly int t
+    cdef readonly int _previous_t
+    cdef readonly int _k_endog, _k_states, _k_posdef, _k_endog2, _k_states2, _k_posdef2, _k_endogstates, _k_statesposdef
+    cdef readonly int _nmissing
 
     # Functions
     cpdef seek(self, unsigned int t, unsigned int transform_diagonalize, unsigned int transform_generalized_collapse)
@@ -100,8 +103,9 @@ cdef class dStatespace(object):
 
     # Flags
     cdef readonly int time_invariant
-    cdef readonly int initialized
+    cdef readonly int initialized, initialized_diffuse, initialized_stationary
     cdef public int diagonal_obs_cov
+    cdef readonly int _diagonal_obs_cov
     cdef public int subset_design
     cdef public int companion_transition
 
@@ -118,6 +122,7 @@ cdef class dStatespace(object):
     cdef readonly np.float64_t [::1,:] transform_cholesky
     cdef readonly np.float64_t [::1,:] transform_obs_cov
     cdef readonly np.float64_t [::1,:] transform_design
+    cdef readonly np.float64_t [:] transform_obs_intercept
     cdef readonly np.float64_t transform_determinant
 
     cdef readonly np.float64_t [:] collapse_obs
@@ -142,9 +147,10 @@ cdef class dStatespace(object):
     cdef np.float64_t * _initial_diffuse_state_cov
 
     # Current location
-    cdef int t
-    cdef int _k_endog, _k_states, _k_posdef, _k_endog2, _k_states2, _k_posdef2, _k_endogstates, _k_statesposdef
-    cdef int _nmissing
+    cdef readonly int t
+    cdef readonly int _previous_t
+    cdef readonly int _k_endog, _k_states, _k_posdef, _k_endog2, _k_states2, _k_posdef2, _k_endogstates, _k_statesposdef
+    cdef readonly int _nmissing
 
     # Functions
     cpdef seek(self, unsigned int t, unsigned int transform_diagonalize, unsigned int transform_generalized_collapse)
@@ -174,8 +180,9 @@ cdef class cStatespace(object):
 
     # Flags
     cdef readonly int time_invariant
-    cdef readonly int initialized
+    cdef readonly int initialized, initialized_diffuse, initialized_stationary
     cdef public int diagonal_obs_cov
+    cdef readonly int _diagonal_obs_cov
     cdef public int subset_design
     cdef public int companion_transition
 
@@ -192,6 +199,7 @@ cdef class cStatespace(object):
     cdef readonly np.complex64_t [::1,:] transform_cholesky
     cdef readonly np.complex64_t [::1,:] transform_obs_cov
     cdef readonly np.complex64_t [::1,:] transform_design
+    cdef readonly np.complex64_t [:] transform_obs_intercept
     cdef readonly np.complex64_t transform_determinant
 
     cdef readonly np.complex64_t [:] collapse_obs
@@ -216,9 +224,10 @@ cdef class cStatespace(object):
     cdef np.complex64_t * _initial_diffuse_state_cov
 
     # Current location
-    cdef int t
-    cdef int _k_endog, _k_states, _k_posdef, _k_endog2, _k_states2, _k_posdef2, _k_endogstates, _k_statesposdef
-    cdef int _nmissing
+    cdef readonly int t
+    cdef readonly int _previous_t
+    cdef readonly int _k_endog, _k_states, _k_posdef, _k_endog2, _k_states2, _k_posdef2, _k_endogstates, _k_statesposdef
+    cdef readonly int _nmissing
 
     # Functions
     cpdef seek(self, unsigned int t, unsigned int transform_diagonalize, unsigned int transform_generalized_collapse)
@@ -248,8 +257,9 @@ cdef class zStatespace(object):
 
     # Flags
     cdef readonly int time_invariant
-    cdef readonly int initialized
+    cdef readonly int initialized, initialized_diffuse, initialized_stationary
     cdef public int diagonal_obs_cov
+    cdef readonly int _diagonal_obs_cov
     cdef public int subset_design
     cdef public int companion_transition
 
@@ -266,6 +276,7 @@ cdef class zStatespace(object):
     cdef readonly np.complex128_t [::1,:] transform_cholesky
     cdef readonly np.complex128_t [::1,:] transform_obs_cov
     cdef readonly np.complex128_t [::1,:] transform_design
+    cdef readonly np.complex128_t [:] transform_obs_intercept
     cdef readonly np.complex128_t transform_determinant
 
     cdef readonly np.complex128_t [:] collapse_obs
@@ -290,9 +301,10 @@ cdef class zStatespace(object):
     cdef np.complex128_t * _initial_diffuse_state_cov
 
     # Current location
-    cdef int t
-    cdef int _k_endog, _k_states, _k_posdef, _k_endog2, _k_states2, _k_posdef2, _k_endogstates, _k_statesposdef
-    cdef int _nmissing
+    cdef readonly int t
+    cdef readonly int _previous_t
+    cdef readonly int _k_endog, _k_states, _k_posdef, _k_endog2, _k_states2, _k_posdef2, _k_endogstates, _k_statesposdef
+    cdef readonly int _nmissing
 
     # Functions
     cpdef seek(self, unsigned int t, unsigned int transform_diagonalize, unsigned int transform_generalized_collapse)

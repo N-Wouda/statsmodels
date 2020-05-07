@@ -13,8 +13,8 @@
 
 TODO:
 * Where is Transf_gen for general monotonic transformation ? found and added it
-* write some docstrings, some parts I don't remember
-* add Box-Cox transformation, parameterized ?
+* write some docstrings, some parts I do not remember
+* add Box-Cox transformation, parametrized ?
 
 
 this is only partially cleaned, still includes test examples as functions
@@ -50,14 +50,19 @@ License: BSD
 
 '''
 
+import numpy as np
+from numpy import poly1d,sqrt, exp
+
+import scipy
+from scipy import stats, special
+from scipy.stats import distributions
+
+from statsmodels.compat.python import iteritems
+from statsmodels.stats.moment_helpers import mvsk2mc, mc2mvsk
+
+
 #note copied from distr_skewnorm_0.py
 
-from __future__ import print_function
-from statsmodels.compat.python import range, iteritems
-from scipy import stats, special, integrate  # integrate is for scipy 0.6.0 ???
-from scipy.stats import distributions
-from statsmodels.stats.moment_helpers import mvsk2mc, mc2mvsk
-import numpy as np
 
 class SkewNorm_gen(distributions.rv_continuous):
     '''univariate Skew-Normal distribution of Azzalini
@@ -208,8 +213,6 @@ appears in J.Roy.Statist.Soc, series B, vol.65, pp.367-389
 ##    return (mc, mc2, mc3, mc4)
 
 
-from numpy import poly1d,sqrt, exp
-import scipy
 def _hermnorm(N):
     # return the negatively normalized hermite polynomials up to order N-1
     #  (inclusive)
@@ -228,7 +231,6 @@ def pdf_moments_st(cnt):
 
     version of scipy.stats, any changes ?
     the scipy.stats version has a bug and returns normal distribution
-
     """
 
     N = len(cnt)
@@ -298,7 +300,7 @@ def pdf_mvsk(mvsk):
 
     References
     ----------
-    http://en.wikipedia.org/wiki/Edgeworth_series
+    https://en.wikipedia.org/wiki/Edgeworth_series
     Johnson N.L., S. Kotz, N. Balakrishnan: Continuous Univariate
     Distributions, Volume 1, 2nd ed., p.30
     """
@@ -346,7 +348,7 @@ def pdf_moments(cnt):
 
     References
     ----------
-    http://en.wikipedia.org/wiki/Edgeworth_series
+    https://en.wikipedia.org/wiki/Edgeworth_series
     Johnson N.L., S. Kotz, N. Balakrishnan: Continuous Univariate
     Distributions, Volume 1, 2nd ed., p.30
     """
@@ -411,7 +413,7 @@ class NormExpan_gen(distributions.rv_continuous):
         where xc = (x-mu)/sig is the standardized value of the random variable
         and H(xc,3) and H(xc,4) are Hermite polynomials
 
-        Note: This distribution has to be parameterized during
+        Note: This distribution has to be parametrized during
         initialization and instantiation, and does not have a shape
         parameter after instantiation (similar to frozen distribution
         except for location and scale.) Location and scale can be used
@@ -487,11 +489,6 @@ Author: josef-pktd
 License: BSD
 
 '''
-
-from scipy import integrate # for scipy 0.6.0
-
-from scipy import stats, info
-from scipy.stats import distributions
 
 
 def get_u_argskwargs(**kwargs):
@@ -583,9 +580,6 @@ loggammaexpg = Transf_gen(stats.gamma, np.log, np.exp, numargs=1)
 random variable
 
 '''
-from scipy import stats
-from scipy.stats import distributions
-import numpy as np
 
 class ExpTransf_gen(distributions.rv_continuous):
     '''Distribution based on log/exp transformation
@@ -799,7 +793,7 @@ class SquareFunc(object):
     '''class to hold quadratic function with inverse function and derivative
 
     using instance methods instead of class methods, if we want extension
-    to parameterized function
+    to parametrized function
     '''
     def inverseplus(self, x):
         return np.sqrt(x)
@@ -910,7 +904,7 @@ a wrapper for scipy.stats.kde.mvndst
 *     CORREL REAL, array of correlation coefficients; the correlation
 *            coefficient in row I column J of the correlation matrix
 *            should be stored in CORREL( J + ((I-2)*(I-1))/2 ), for J < I.
-*            THe correlation matrix must be positive semidefinite.
+*            The correlation matrix must be positive semidefinite.
 *     MAXPTS INTEGER, maximum number of function values allowed. This
 *            parameter can be used to limit the time. A sensible
 *            strategy is to start with MAXPTS = 1000*N, and then
@@ -1030,7 +1024,7 @@ def mvstdnormcdf(lower, upper, corrcoef, **kwds):
 
     '''
     n = len(lower)
-    #don't know if converting to array is necessary,
+    #do not know if converting to array is necessary,
     #but it makes ndim check possible
     lower = np.array(lower)
     upper = np.array(upper)
@@ -1057,7 +1051,7 @@ def mvstdnormcdf(lower, upper, corrcoef, **kwds):
     else:
         raise ValueError('corrcoef has incorrect dimension')
 
-    if not 'maxpts' in kwds:
+    if 'maxpts' not in kwds:
         if n >2:
             kwds['maxpts'] = 10000*n
 

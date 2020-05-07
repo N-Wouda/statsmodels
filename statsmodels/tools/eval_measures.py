@@ -9,6 +9,8 @@ License: BSD-3
 """
 import numpy as np
 
+from statsmodels.tools.validation import array_like
+
 
 def mse(x1, x2, axis=0):
     """mean squared error
@@ -32,7 +34,6 @@ def mse(x1, x2, axis=0):
     This uses ``numpy.asanyarray`` to convert the input. Whether this is the
     desired result or not depends on the array subclass, for example
     numpy matrices will silently produce an incorrect result.
-
     """
     x1 = np.asanyarray(x1)
     x2 = np.asanyarray(x2)
@@ -61,7 +62,6 @@ def rmse(x1, x2, axis=0):
     This uses ``numpy.asanyarray`` to convert the input. Whether this is the
     desired result or not depends on the array subclass, for example
     numpy matrices will silently produce an incorrect result.
-
     """
     x1 = np.asanyarray(x1)
     x2 = np.asanyarray(x2)
@@ -89,7 +89,6 @@ def maxabs(x1, x2, axis=0):
     If ``x1`` and ``x2`` have different shapes, then they need to broadcast.
     This uses ``numpy.asanyarray`` to convert the input. Whether this is the
     desired result or not depends on the array subclass.
-
     """
     x1 = np.asanyarray(x1)
     x2 = np.asanyarray(x2)
@@ -117,7 +116,6 @@ def meanabs(x1, x2, axis=0):
     If ``x1`` and ``x2`` have different shapes, then they need to broadcast.
     This uses ``numpy.asanyarray`` to convert the input. Whether this is the
     desired result or not depends on the array subclass.
-
     """
     x1 = np.asanyarray(x1)
     x2 = np.asanyarray(x2)
@@ -145,7 +143,6 @@ def medianabs(x1, x2, axis=0):
     If ``x1`` and ``x2`` have different shapes, then they need to broadcast.
     This uses ``numpy.asanyarray`` to convert the input. Whether this is the
     desired result or not depends on the array subclass.
-
     """
     x1 = np.asanyarray(x1)
     x2 = np.asanyarray(x2)
@@ -173,7 +170,6 @@ def bias(x1, x2, axis=0):
     If ``x1`` and ``x2`` have different shapes, then they need to broadcast.
     This uses ``numpy.asanyarray`` to convert the input. Whether this is the
     desired result or not depends on the array subclass.
-
     """
     x1 = np.asanyarray(x1)
     x2 = np.asanyarray(x2)
@@ -201,7 +197,6 @@ def medianbias(x1, x2, axis=0):
     If ``x1`` and ``x2`` have different shapes, then they need to broadcast.
     This uses ``numpy.asanyarray`` to convert the input. Whether this is the
     desired result or not depends on the array subclass.
-
     """
     x1 = np.asanyarray(x1)
     x2 = np.asanyarray(x2)
@@ -229,7 +224,6 @@ def vare(x1, x2, ddof=0, axis=0):
     If ``x1`` and ``x2`` have different shapes, then they need to broadcast.
     This uses ``numpy.asanyarray`` to convert the input. Whether this is the
     desired result or not depends on the array subclass.
-
     """
     x1 = np.asanyarray(x1)
     x2 = np.asanyarray(x2)
@@ -257,7 +251,6 @@ def stde(x1, x2, ddof=0, axis=0):
     If ``x1`` and ``x2`` have different shapes, then they need to broadcast.
     This uses ``numpy.asanyarray`` to convert the input. Whether this is the
     desired result or not depends on the array subclass.
-
     """
     x1 = np.asanyarray(x1)
     x2 = np.asanyarray(x2)
@@ -265,40 +258,34 @@ def stde(x1, x2, ddof=0, axis=0):
 
 
 def iqr(x1, x2, axis=0):
-    """interquartile range of error
-
-    rounded index, no interpolations
-
-    this could use newer numpy function instead
+    """
+    Interquartile range of error
 
     Parameters
     ----------
-    x1, x2 : array_like
-       The performance measure depends on the difference between these two
-       arrays.
-    axis : int
+    x1 : array_like
+       One of the inputs into the IQR calculation.
+    x2 : array_like
+       The other input into the IQR calculation.
+    axis : {None, int}
        axis along which the summary statistic is calculated
 
     Returns
     -------
-    mse : ndarray or float
-       mean squared error along given axis.
+    irq : {float, ndarray}
+       Interquartile range along given axis.
 
     Notes
     -----
-    If ``x1`` and ``x2`` have different shapes, then they need to broadcast.
-
-    This uses ``numpy.asarray`` to convert the input, in contrast to the other
-    functions in this category.
-
+    If ``x1`` and ``x2`` have different shapes, then they must broadcast.
     """
-    x1 = np.asarray(x1)
-    x2 = np.asarray(x2)
+    x1 = array_like(x1, 'x1', dtype=None, ndim=None)
+    x2 = array_like(x2, 'x1', dtype=None, ndim=None)
     if axis is None:
-        x1 = np.ravel(x1)
-        x2 = np.ravel(x2)
+        x1 = x1.ravel()
+        x2 = x2.ravel()
         axis = 0
-    xdiff = np.sort(x1 - x2)
+    xdiff = np.sort(x1 - x2, axis=axis)
     nobs = x1.shape[axis]
     idx = np.round((nobs-1) * np.array([0.25, 0.75])).astype(int)
     sl = [slice(None)] * xdiff.ndim
@@ -330,8 +317,7 @@ def aic(llf, nobs, df_modelwc):
 
     References
     ----------
-    http://en.wikipedia.org/wiki/Akaike_information_criterion
-
+    https://en.wikipedia.org/wiki/Akaike_information_criterion
     """
     return -2. * llf + 2. * df_modelwc
 
@@ -355,8 +341,7 @@ def aicc(llf, nobs, df_modelwc):
 
     References
     ----------
-    http://en.wikipedia.org/wiki/Akaike_information_criterion#AICc
-
+    https://en.wikipedia.org/wiki/Akaike_information_criterion#AICc
     """
     return -2. * llf + 2. * df_modelwc * nobs / (nobs - df_modelwc - 1.)
 
@@ -380,8 +365,7 @@ def bic(llf, nobs, df_modelwc):
 
     References
     ----------
-    http://en.wikipedia.org/wiki/Bayesian_information_criterion
-
+    https://en.wikipedia.org/wiki/Bayesian_information_criterion
     """
     return -2. * llf + np.log(nobs) * df_modelwc
 
@@ -405,8 +389,7 @@ def hqic(llf, nobs, df_modelwc):
 
     References
     ----------
-    Wikipedia doesn't say much
-
+    Wikipedia does not say much
     """
     return -2. * llf + 2 * np.log(np.log(nobs)) * df_modelwc
 
@@ -414,7 +397,7 @@ def hqic(llf, nobs, df_modelwc):
 # IC based on residual sigma
 
 def aic_sigma(sigma2, nobs, df_modelwc, islog=False):
-    """Akaike information criterion
+    r"""Akaike information criterion
 
     Parameters
     ----------
@@ -462,8 +445,7 @@ def aic_sigma(sigma2, nobs, df_modelwc, islog=False):
 
     References
     ----------
-    http://en.wikipedia.org/wiki/Akaike_information_criterion
-
+    https://en.wikipedia.org/wiki/Akaike_information_criterion
     """
     if not islog:
         sigma2 = np.log(sigma2)
@@ -497,8 +479,7 @@ def aicc_sigma(sigma2, nobs, df_modelwc, islog=False):
 
     References
     ----------
-    http://en.wikipedia.org/wiki/Akaike_information_criterion#AICc
-
+    https://en.wikipedia.org/wiki/Akaike_information_criterion#AICc
     """
     if not islog:
         sigma2 = np.log(sigma2)
@@ -532,8 +513,7 @@ def bic_sigma(sigma2, nobs, df_modelwc, islog=False):
 
     References
     ----------
-    http://en.wikipedia.org/wiki/Bayesian_information_criterion
-
+    https://en.wikipedia.org/wiki/Bayesian_information_criterion
     """
     if not islog:
         sigma2 = np.log(sigma2)
@@ -568,7 +548,6 @@ def hqic_sigma(sigma2, nobs, df_modelwc, islog=False):
     References
     ----------
     xxx
-
     """
     if not islog:
         sigma2 = np.log(sigma2)

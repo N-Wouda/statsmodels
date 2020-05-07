@@ -176,7 +176,6 @@ class Initialization(object):
     >>> init1 = Initialization(k_states=2, 'known', constant=[0, 1])
     >>> init2 = Initialization(k_states=3)
     >>> init2.set((1, 2), init1)
-
     """
 
     def __init__(self, k_states, initialization_type=None,
@@ -263,12 +262,12 @@ class Initialization(object):
             The type of initialization used for the states selected by `index`.
             Must be one of 'known', 'diffuse', 'approximate_diffuse', or
             'stationary'.
-        constant : array-like, optional
+        constant : array_like, optional
             A vector of constant values, denoted :math:`a`. Most often used
             with 'known' initialization, but may also be used with
             'approximate_diffuse' (although it will then likely have little
             effect).
-        stationary_cov : array-like, optional
+        stationary_cov : array_like, optional
             The covariance matrix of the stationary part, denoted :math:`Q_0`.
             Only used with 'known' initialization.
         approximate_diffuse_variance : float, optional
@@ -279,7 +278,8 @@ class Initialization(object):
         # Construct the index, using a slice object as an intermediate step
         # to enforce regularity
         if not isinstance(index, slice):
-            if isinstance(index, int):
+            if isinstance(index, (int, np.integer)):
+                index = int(index)
                 if index < 0 or index >= self.k_states:
                     raise ValueError('Invalid index.')
                 index = (index, index + 1)
@@ -422,7 +422,8 @@ class Initialization(object):
         initialization. To unset all initializations (including both global and
         block level), use the `clear` method.
         """
-        if isinstance(index, int):
+        if isinstance(index, (int, np.integer)):
+            index = int(index)
             if index < 0 or index > self.k_states:
                 raise ValueError('Invalid index.')
             index = (index, index + 1)
@@ -488,27 +489,27 @@ class Initialization(object):
             A state space model representation object, optional if 'stationary'
             initialization is used and ignored otherwise. See notes for
             details in the stationary initialization case.
-        model_index : array, optional
+        model_index : ndarray, optional
             The base index of the block in the model.
-        initial_state_mean : array, optional
+        initial_state_mean : ndarray, optional
             An array (or more usually view) in which to place the initial state
             mean.
-        initial_diffuse_state_cov : array, optional
+        initial_diffuse_state_cov : ndarray, optional
             An array (or more usually view) in which to place the diffuse
             component of initial state covariance matrix.
-        initial_stationary_state_cov : array, optional
+        initial_stationary_state_cov : ndarray, optional
             An array (or more usually view) in which to place the stationary
             component of initial state covariance matrix.
 
 
         Returns
         -------
-        initial_state_mean : array
+        initial_state_mean : ndarray
             Initial state mean, :math:`a_1^{(0)} = a`
-        initial_diffuse_state_cov : array
+        initial_diffuse_state_cov : ndarray
             Diffuse component of initial state covariance matrix,
             :math:`P_\infty = A A'`
-        initial_stationary_state_cov : array
+        initial_stationary_state_cov : ndarray
             Stationary component of initial state covariance matrix,
             :math:`P_* = R_0 Q_0 R_0'`
 
@@ -538,7 +539,7 @@ class Initialization(object):
             state_intercept = model['state_intercept', ix1, 0]
             transition = model[('transition',) + ix2 + (0,)]
             selection = model['selection', ix1, :, 0]
-            state_cov = model['state_cov']
+            state_cov = model['state_cov', :, :, 0]
             selected_state_cov = np.dot(selection, state_cov).dot(selection.T)
 
         # Create output arrays if not given

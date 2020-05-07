@@ -6,7 +6,7 @@ _plot_added_variable_doc = """\
     %(extra_params_doc)sfocus_exog : int or string
         The column index of exog, or a variable name, indicating the
         variable whose role in the regression is to be assessed.
-    resid_type : string
+    resid_type : str
         The type of residuals to use for the dependent variable.  If
         None, uses `resid_deviance` for GLM/GEE and `resid` otherwise.
     use_glm_weights : bool
@@ -17,47 +17,49 @@ _plot_added_variable_doc = """\
     fit_kwargs : dict, optional
         Keyword arguments to be passed to fit when refitting the
         model.
-    ax : Axes instance
+    ax: Axes
         Matplotlib Axes instance
 
     Returns
     -------
-    fig : matplotlib Figure
+    Figure
         A matplotlib figure instance.
 """
 
 _plot_partial_residuals_doc = """\
     Create a partial residual, or 'component plus residual' plot for a
-    fited regression model.
+    fitted regression model.
 
     Parameters
     ----------
     %(extra_params_doc)sfocus_exog : int or string
         The column index of exog, or variable name, indicating the
         variable whose role in the regression is to be assessed.
-    ax : Axes instance
+    ax: Axes
         Matplotlib Axes instance
 
     Returns
     -------
-    fig : matplotlib Figure
+    Figure
         A matplotlib figure instance.
 """
 
 _plot_ceres_residuals_doc = """\
-    Produces a CERES (Conditional Expectation Partial Residuals)
-    plot for a fitted regression model.
+    Conditional Expectation Partial Residuals (CERES) plot.
+
+    Produce a CERES plot for a fitted regression model.
 
     Parameters
     ----------
-    %(extra_params_doc)sfocus_exog : integer or string
+    %(extra_params_doc)s
+    focus_exog : {int, str}
         The column index of results.model.exog, or the variable name,
         indicating the variable whose role in the regression is to be
         assessed.
     frac : float
         Lowess tuning parameter for the adjusted model used in the
         CERES analysis.  Not used if `cond_means` is provided.
-    cond_means : array-like, optional
+    cond_means : array_like, optional
         If provided, the columns of this array span the space of the
         conditional means E[exog | focus exog], where exog ranges over
         some or all of the columns of exog (other than the focus exog).
@@ -67,16 +69,8 @@ _plot_ceres_residuals_doc = """\
 
     Returns
     -------
-    fig : matplotlib.Figure instance
+    Figure
         The figure on which the partial residual plot is drawn.
-
-    References
-    ----------
-    RD Cook and R Croos-Dabrera (1998).  Partial residual plots in
-    generalized linear models.  Journal of the American
-    Statistical Association, 93:442.
-
-    RD Cook (1993). Partial residual plots.  Technometrics 35:4.
 
     Notes
     -----
@@ -99,6 +93,32 @@ _plot_ceres_residuals_doc = """\
     If the focus variable is believed to be independent of the
     other exog variables, `cond_means` can be set to an (empty)
     nx0 array.
+
+    References
+    ----------
+    .. [1] RD Cook and R Croos-Dabrera (1998).  Partial residual plots
+       in generalized linear models.  Journal of the American
+       Statistical Association, 93:442.
+
+    .. [2] RD Cook (1993). Partial residual plots.  Technometrics 35:4.
+
+    Examples
+    --------
+    Using a model built from the the state crime dataset, make a CERES plot with
+    the rate of Poverty as the focus variable.
+
+    >>> import statsmodels.api as sm
+    >>> import matplotlib.pyplot as plt
+    >>> import statsmodels.formula.api as smf
+    >>> from statsmodels.graphics.regressionplots import plot_ceres_residuals
+
+    >>> crime_data = sm.datasets.statecrime.load_pandas()
+    >>> results = smf.ols('murder ~ hs_grad + urban + poverty + single',
+    ...                   data=crime_data.data).fit()
+    >>> plot_ceres_residuals(results, 'poverty')
+    >>> plt.show()
+
+    .. plot:: plots/graphics_regression_ceres_residuals.py
 """
 
 
@@ -107,7 +127,8 @@ _plot_influence_doc = """\
 
     Parameters
     ----------
-    %(extra_params_doc)external : bool
+    {extra_params_doc}
+    external : bool
         Whether to use externally or internally studentized residuals. It is
         recommended to leave external as True.
     alpha : float
@@ -120,12 +141,14 @@ _plot_influence_doc = """\
         The range of `criterion` is mapped to 10**2 - size**2 in points.
     plot_alpha : float
         The `alpha` of the plotted points.
-    ax : matplotlib Axes instance
+    ax : AxesSubplot
         An instance of a matplotlib Axes.
+    **kwargs
+        Additional parameters passed through to `plot`.
 
     Returns
     -------
-    fig : matplotlib figure
+    Figure
         The matplotlib figure that contains the Axes.
 
     Notes
@@ -136,11 +159,29 @@ _plot_influence_doc = """\
     influence point. The value of large residuals can be controlled using the
     `alpha` parameter. Large leverage points are identified as
     hat_i > 2 * (df_model + 1)/nobs.
+
+    Examples
+    --------
+    Using a model built from the the state crime dataset, plot the influence in
+    regression.  Observations with high leverage, or large residuals will be
+    labeled in the plot to show potential influence points.
+
+    >>> import statsmodels.api as sm
+    >>> import matplotlib.pyplot as plt
+    >>> import statsmodels.formula.api as smf
+
+    >>> crime_data = sm.datasets.statecrime.load_pandas()
+    >>> results = smf.ols('murder ~ hs_grad + urban + poverty + single',
+    ...                   data=crime_data.data).fit()
+    >>> sm.graphics.influence_plot(results)
+    >>> plt.show()
+
+    .. plot:: plots/graphics_regression_influence.py
     """
 
 
 _plot_leverage_resid2_doc = """\
-    Plots leverage statistics vs. normalized residuals squared
+    Plot leverage statistics vs. normalized residuals squared
 
     Parameters
     ----------
@@ -149,11 +190,31 @@ _plot_leverage_resid2_doc = """\
     alpha : float
         Specifies the cut-off for large-standardized residuals. Residuals
         are assumed to be distributed N(0, 1) with alpha=alpha.
-    ax : Axes instance
+    ax : Axes
         Matplotlib Axes instance
+    **kwargs
+        Additional parameters passed the plot command.
 
     Returns
     -------
-    fig : matplotlib Figure
+    Figure
         A matplotlib figure instance.
+
+    Examples
+    --------
+    Using a model built from the the state crime dataset, plot the leverage
+    statistics vs. normalized residuals squared.  Observations with
+    Large-standardized Residuals will be labeled in the plot.
+
+    >>> import statsmodels.api as sm
+    >>> import matplotlib.pyplot as plt
+    >>> import statsmodels.formula.api as smf
+
+    >>> crime_data = sm.datasets.statecrime.load_pandas()
+    >>> results = smf.ols('murder ~ hs_grad + urban + poverty + single',
+    ...                   data=crime_data.data).fit()
+    >>> sm.graphics.plot_leverage_resid2(results)
+    >>> plt.show()
+
+    .. plot:: plots/graphics_regression_leverage_resid2.py
     """

@@ -4,13 +4,13 @@ Created on Tue Nov 08 22:28:48 2011
 
 @author: josef
 """
+import pytest
 
-from statsmodels.compat.python import zip
 import numpy as np
-from numpy.testing import assert_equal, assert_almost_equal, assert_
+from numpy.testing import assert_equal, assert_almost_equal
 
 from statsmodels.tools.eval_measures import (
-    maxabs, meanabs, medianabs, medianbias, mse, rmse, stde, vare,
+    maxabs, meanabs, medianabs, medianbias, mse, rmse, vare,
     aic, aic_sigma, aicc, aicc_sigma, bias, bic, bic_sigma,
     hqic, hqic_sigma, iqr)
 
@@ -68,37 +68,56 @@ def test_eval_measures():
     assert_equal(vare(x, y, axis=1),
                  np.array([ 2.,  2.,  2.,  2.]))
 
+
+ics = [aic, aicc, bic, hqic]
+ics_sig = [aic_sigma, aicc_sigma, bic_sigma, hqic_sigma]
+
+
+@pytest.mark.parametrize('ic,ic_sig', zip(ics, ics_sig))
+def test_ic_equivalence(ic, ic_sig):
+    # consistency check
+
+    assert ic(np.array(2), 10, 2).dtype == np.float
+    assert ic_sig(np.array(2), 10, 2).dtype == np.float
+
+    assert_almost_equal(ic(-10./2.*np.log(2.), 10, 2)/10,
+                        ic_sig(2, 10, 2),
+                        decimal=14)
+
+    assert_almost_equal(ic_sig(np.log(2.), 10, 2, islog=True),
+                        ic_sig(2, 10, 2),
+                        decimal=14)
+
+
 def test_ic():
-    #test information criteria
-    #consistency check
+    # test information criteria
 
-    ics = [aic, aicc, bic, hqic]
-    ics_sig = [aic_sigma, aicc_sigma, bic_sigma, hqic_sigma]
-
-    for ic, ic_sig in zip(ics, ics_sig):
-        assert_(ic(np.array(2),10,2).dtype == np.float, msg=repr(ic))
-        assert_(ic_sig(np.array(2),10,2).dtype == np.float, msg=repr(ic_sig) )
-
-        assert_almost_equal(ic(-10./2.*np.log(2.),10,2)/10,
-                            ic_sig(2, 10, 2),
-                            decimal=14)
-
-        assert_almost_equal(ic_sig(np.log(2.),10,2, islog=True),
-                            ic_sig(2, 10, 2),
-                            decimal=14)
-
-
-    #examples penalty directly from formula
-    n, k = 10, 2
+    # examples penalty directly from formula
+    n = 10
+    k = 2
     assert_almost_equal(aic(0, 10, 2), 2*k, decimal=14)
-    #next see Wikipedia
+    # next see Wikipedia
     assert_almost_equal(aicc(0, 10, 2),
                         aic(0, n, k) + 2*k*(k+1.)/(n-k-1.), decimal=14)
     assert_almost_equal(bic(0, 10, 2), np.log(n)*k, decimal=14)
     assert_almost_equal(hqic(0, 10, 2), 2*np.log(np.log(n))*k, decimal=14)
 
 
+def test_iqr_axis(reset_randomstate):
+    x1 = np.random.standard_normal((100, 100))
+    x2 = np.random.standard_normal((100, 100))
+    ax_none = iqr(x1, x2, axis=None)
+    ax_none_direct = iqr(x1.ravel(), x2.ravel())
+    assert_equal(ax_none, ax_none_direct)
 
-if __name__ == '__main__':
-    test_eval_measures()
-    test_ic()
+    ax_0 = iqr(x1, x2, axis=0)
+    assert ax_0.shape == (100,)
+    ax_0_direct = [iqr(x1[:,i], x2[:,i]) for i in range(100)]
+    assert_almost_equal(ax_0, np.array(ax_0_direct))
+
+    ax_1 = iqr(x1, x2, axis=1)
+    assert ax_1.shape == (100,)
+    ax_1_direct = [iqr(x1[i,:], x2[i,:]) for i in range(100)]
+    assert_almost_equal(ax_1, np.array(ax_1_direct))
+
+    assert any(ax_0 != ax_1)
